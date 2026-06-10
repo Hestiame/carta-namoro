@@ -128,7 +128,7 @@
       <p class="date" id="ov-date"></p>
       <p class="to-name" id="ov-toname">—</p>
       <div class="body" id="ov-body"></div>
-      <p class="sign">Com carinho,</p>
+      <p class="sign" id="ov-sign">Com carinho,</p>
       <p class="seal-note" id="ov-note">—</p>
     </article>
   </div>
@@ -150,11 +150,14 @@
 
   function fail(msg){ statusEl.innerHTML=msg+'<span class="small">Cartas Seladas</span>'; statusEl.hidden=false; stage.hidden=true; }
 
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
   function reveal(row){
     $("ov-name").textContent     = row.recipient_name;
     $("ov-toname").textContent   = row.recipient_name;
     $("ov-note").textContent     = "Para "+row.recipient_name+" · "+row.recipient_turma;
     $("ov-date").textContent     = new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
+    $("ov-sign").innerHTML       = row.sender_name ? ("Com carinho,<br>"+escapeHtml(row.sender_name)) : "Com carinho,";
     var body=$("ov-body"); body.innerHTML="";
     String(row.message).split(/\n\n+/).forEach(function(para){
       var p=document.createElement("p"); p.textContent=para.trim(); body.appendChild(p);
