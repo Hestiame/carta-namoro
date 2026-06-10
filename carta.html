@@ -91,6 +91,10 @@
   .scene.is-open .env-caption{opacity:0; pointer-events:none; transition:opacity .4s}
   .scene.is-open .letter{opacity:1; transform:translate(-50%,-50%) translateY(0) scale(1); pointer-events:auto}
 
+  .credit{position:fixed; right:14px; bottom:12px; z-index:6; margin:0;
+    font-family:"JetBrains Mono",monospace; font-size:.58rem; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--gold-soft); opacity:.4; pointer-events:none; user-select:none}
+
   .mote{position:absolute; width:5px; height:5px; border-radius:50%; background:rgba(226,204,142,.6); z-index:2; pointer-events:none;
     animation:rise 9s linear infinite; opacity:0}
   @keyframes rise{0%{transform:translateY(20px);opacity:0}15%{opacity:.7}100%{transform:translateY(-220px);opacity:0}}
@@ -132,6 +136,7 @@
       <p class="seal-note" id="ov-note">—</p>
     </article>
   </div>
+  <p class="credit">feito por José Ant. · 3adm 1</p>
 </div>
 
 <script>
