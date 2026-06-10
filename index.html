@@ -113,6 +113,14 @@
   .btn.wa:hover{background:#1f7a4d; color:#EAFBF1}
 
   .list-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.8rem}
+  .stats{display:flex; gap:.6rem; margin-bottom:.9rem}
+  .stat{flex:1; text-align:center; padding:.6rem .3rem; border-radius:11px;
+    background:rgba(255,253,246,.7); border:1px solid rgba(194,160,74,.4)}
+  .stat b{display:block; font-family:"Bodoni Moda",serif; font-size:1.5rem; color:var(--bordeaux-deep); line-height:1}
+  .stat span{font-family:"JetBrains Mono",monospace; font-size:.56rem; letter-spacing:.16em; text-transform:uppercase; color:var(--bordeaux); opacity:.8}
+  .search{width:100%; margin-bottom:.9rem; font-family:"Cormorant Garamond",serif; font-size:1.05rem; color:var(--ink);
+    background:#FFFDF6; border:1px solid rgba(110,20,35,.22); border-radius:9px; padding:.55rem .7rem}
+  .search:focus{outline:none; border-color:var(--gold); box-shadow:var(--ring)}
   .roster{display:flex; flex-direction:column; gap:.6rem}
   .roster-item{
     display:flex; align-items:center; gap:.8rem; padding:.7rem .9rem; border-radius:11px;
@@ -121,6 +129,8 @@
   .roster-item .who{flex:1; min-width:0}
   .roster-item .name{font-size:1.16rem; color:var(--bordeaux-deep); line-height:1.1}
   .roster-item .meta{font-family:"JetBrains Mono",monospace; font-size:.66rem; letter-spacing:.06em; color:var(--bordeaux); opacity:.85; margin-top:.15rem}
+  .roster-item .opened{font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.04em; margin-top:.2rem; color:#9a8a55}
+  .roster-item .opened.on{color:#1f7a4d}
   .mini{font-size:.86rem; padding:.42rem .8rem}
   .empty{padding:1.4rem; text-align:center; color:var(--bordeaux); opacity:.7; font-style:italic}
 
@@ -363,6 +373,12 @@
           <h2 class="display-h" style="font-size:1.5rem">Cartas cadastradas</h2>
           <span class="eyebrow" id="roster-count"></span>
         </div>
+        <div class="stats" id="stats" hidden>
+          <div class="stat"><b id="st-total">0</b><span>cartas</span></div>
+          <div class="stat"><b id="st-abertas">0</b><span>abertas</span></div>
+          <div class="stat"><b id="st-aberturas">0</b><span>aberturas</span></div>
+        </div>
+        <input id="search" class="search" type="search" placeholder="Buscar por nome, turma ou código…">
         <div class="roster" id="roster"></div>
       </div>
     </div>
@@ -475,26 +491,58 @@
   $("tab-cadastro").onclick=function(){switchTab("cadastro");};
   $("tab-impressao").onclick=function(){switchTab("impressao"); renderCards();};
 
+  // ---- estatísticas ----
+  function renderStats(){
+    var st=$("stats");
+    if(!letters.length){ st.hidden=true; return; }
+    st.hidden=false;
+    var abertas=0, aberturas=0;
+    letters.forEach(function(l){ if(l.opens>0) abertas++; aberturas+=(l.opens||0); });
+    $("st-total").textContent=letters.length;
+    $("st-abertas").textContent=abertas;
+    $("st-aberturas").textContent=aberturas;
+  }
+
+  function fmtOpened(l){
+    if(!l.opens){ return "não aberta"; }
+    var quando="";
+    if(l.lastOpened){
+      var d=new Date(l.lastOpened);
+      quando=" · última "+d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    }
+    return "aberta "+l.opens+"x"+quando;
+  }
+
   // ---- roster (lista de cadastro) ----
   function renderRoster(){
+    renderStats();
+    var term=($("search").value||"").trim().toLowerCase();
+    var list = term ? letters.filter(function(l){
+      return (l.name+" "+l.turma+" "+l.code).toLowerCase().indexOf(term)>=0;
+    }) : letters;
+
     $("roster-count").textContent = letters.length + " cadastrada(s)";
     if(!letters.length){ rosterEl.innerHTML='<div class="empty">Nenhuma carta cadastrada ainda.</div>'; return; }
+    if(!list.length){ rosterEl.innerHTML='<div class="empty">Nada encontrado para “'+escapeHtml(term)+'”.</div>'; return; }
     rosterEl.innerHTML="";
-    letters.forEach(function(l){
+    list.forEach(function(l){
       var row=document.createElement("div"); row.className="roster-item";
       var waBtn = l.phone ? '<button class="btn wa mini act-wa">WhatsApp</button>' : '';
-      row.innerHTML='<div class="who"><div class="name"></div><div class="meta"></div></div>'+
+      row.innerHTML='<div class="who"><div class="name"></div><div class="meta"></div><div class="opened"></div></div>'+
         '<button class="btn ghost mini act-prev">Pré-visualizar</button>'+
         waBtn+
         '<button class="btn danger mini act-del">Remover</button>';
       row.querySelector(".name").textContent=l.name;
       row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code+(l.phone?"  ·  📱":"");
+      var op=row.querySelector(".opened"); op.textContent=fmtOpened(l);
+      if(l.opens>0) op.classList.add("on");
       row.querySelector(".act-prev").onclick=function(){openLetter(l);};
       row.querySelector(".act-del").onclick=function(){removeCarta(l);};
       var wa=row.querySelector(".act-wa"); if(wa) wa.onclick=function(){ enviarWhatsApp(l); };
       rosterEl.appendChild(row);
     });
   }
+  $("search").addEventListener("input", renderRoster);
 
   // ---- abrir o WhatsApp da pessoa com a carta já pronta ----
   function enviarWhatsApp(l){
@@ -644,13 +692,13 @@
 
   // ---- mapeia uma linha do banco para o formato usado na tela ----
   function mapRow(r){
-    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name, phone:r.recipient_phone };
+    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name, phone:r.recipient_phone, opens:(r.open_count||0), lastOpened:r.last_opened_at };
   }
 
   // ---- carrega as cartas do banco ----
   async function loadCartas(){
     var res=await sb.from("cartas")
-      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, created_at")
+      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, open_count, last_opened_at, created_at")
       .order("created_at",{ascending:false});
     if(res.error){
       rosterEl.innerHTML='<div class="empty">Erro ao carregar: '+res.error.message+'</div>';
