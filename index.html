@@ -344,6 +344,10 @@
           <span class="lab">Mensagem da carta</span>
           <textarea id="f-msg" required placeholder="Escreva a carta que será revelada ao escanear o QR Code…"></textarea>
         </label>
+        <label>
+          <span class="lab">De quem é a carta? (opcional)</span>
+          <input id="f-sender" placeholder="Ex.: Lucas — ou deixe em branco para anônimo">
+        </label>
         <button class="btn" type="submit">Gerar carta &amp; QR Code</button>
         <p class="hint" id="last-code" hidden></p>
       </form>
@@ -415,7 +419,7 @@
       <p class="date" id="ov-date"></p>
       <p class="to-name" id="ov-toname">—</p>
       <div class="body" id="ov-body"></div>
-      <p class="sign">Com carinho,</p>
+      <p class="sign" id="ov-sign">Com carinho,</p>
       <p class="seal-note" id="ov-code">—</p>
     </article>
   </div>
@@ -445,6 +449,7 @@
   // ---- elementos ----
   var $ = function(id){return document.getElementById(id);};
   var rosterEl=$("roster"), cardsEl=$("cards");
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
   function code(){
     var chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789", s;
@@ -530,6 +535,7 @@
     $("ov-toname").textContent=l.name;
     $("ov-code").textContent="Envelope "+l.code+" · "+l.turma;
     $("ov-date").textContent=new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
+    $("ov-sign").innerHTML = l.sender ? ("Com carinho,<br>"+escapeHtml(l.sender)) : "Com carinho,";
     var body=$("ov-body"); body.innerHTML="";
     l.msg.split(/\n\n+/).forEach(function(para){
       var p=document.createElement("p"); p.textContent=para.trim(); body.appendChild(p);
@@ -576,6 +582,7 @@
     e.preventDefault();
     if(!sb) return;
     var name=$("f-name").value.trim(), turma=$("f-turma").value.trim(), msg=$("f-msg").value.trim();
+    var sender=$("f-sender").value.trim();
     if(!name||!turma||!msg) return;
     var btn=this.querySelector('button[type="submit"]'); btn.disabled=true;
     var lc=$("last-code");
@@ -584,8 +591,8 @@
     for(var attempt=0; attempt<5 && !row; attempt++){
       var c=code();
       var res=await sb.from("cartas").insert({
-        code:c, recipient_name:name, recipient_turma:turma, message:msg
-      }).select("code, public_token, recipient_name, recipient_turma, message").single();
+        code:c, recipient_name:name, recipient_turma:turma, message:msg, sender_name:(sender||null)
+      }).select("code, public_token, recipient_name, recipient_turma, message, sender_name").single();
       if(res.error){
         lastErr=res.error;
         if(res.error.code==="23505") continue;   // código repetido → tenta outro
@@ -611,13 +618,13 @@
 
   // ---- mapeia uma linha do banco para o formato usado na tela ----
   function mapRow(r){
-    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message };
+    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name };
   }
 
   // ---- carrega as cartas do banco ----
   async function loadCartas(){
     var res=await sb.from("cartas")
-      .select("code, public_token, recipient_name, recipient_turma, message, created_at")
+      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, created_at")
       .order("created_at",{ascending:false});
     if(res.error){
       rosterEl.innerHTML='<div class="empty">Erro ao carregar: '+res.error.message+'</div>';
