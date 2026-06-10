@@ -95,6 +95,23 @@
     font-family:"JetBrains Mono",monospace; font-size:.58rem; letter-spacing:.16em; text-transform:uppercase;
     color:var(--gold-soft); opacity:.4; pointer-events:none; user-select:none}
 
+  .sound-toggle{position:fixed; top:14px; right:14px; z-index:7; width:42px; height:42px; border-radius:50%;
+    background:rgba(252,247,236,.10); color:var(--gold-soft); border:1px solid rgba(226,204,142,.4);
+    font-size:1.05rem; cursor:pointer; display:grid; place-items:center; transition:.15s}
+  .sound-toggle:hover{background:rgba(252,247,236,.2)}
+
+  .petal{position:fixed; top:-32px; z-index:1; pointer-events:none; opacity:0;
+    animation:fall linear forwards}
+  @keyframes fall{
+    0%{transform:translateY(-32px) rotate(0deg); opacity:0}
+    12%{opacity:.9}
+    100%{transform:translateY(106vh) rotate(380deg); opacity:0}
+  }
+
+  .body p.typing::after{content:"▌"; color:var(--bordeaux); margin-left:1px;
+    animation:caret .8s steps(1) infinite}
+  @keyframes caret{50%{opacity:0}}
+
   .mote{position:absolute; width:5px; height:5px; border-radius:50%; background:rgba(226,204,142,.6); z-index:2; pointer-events:none;
     animation:rise 9s linear infinite; opacity:0}
   @keyframes rise{0%{transform:translateY(20px);opacity:0}15%{opacity:.7}100%{transform:translateY(-220px);opacity:0}}
@@ -108,6 +125,7 @@
 <body>
 <div class="scene" id="scene">
   <div class="candle" aria-hidden="true"></div>
+  <button class="sound-toggle" id="sound-toggle" aria-label="Ligar ou desligar o som">🔊</button>
 
   <p class="status" id="status">Procurando seu envelope…<span class="small">Cartas Seladas</span></p>
 
@@ -157,26 +175,149 @@
 
   function escapeHtml(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
+  var letterText="";
   function reveal(row){
     $("ov-name").textContent     = row.recipient_name;
     $("ov-toname").textContent   = row.recipient_name;
     $("ov-note").textContent     = "Para "+row.recipient_name+" · "+row.recipient_turma;
     $("ov-date").textContent     = new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
     $("ov-sign").innerHTML       = row.sender_name ? ("Com carinho,<br>"+escapeHtml(row.sender_name)) : "Com carinho,";
-    var body=$("ov-body"); body.innerHTML="";
-    String(row.message).split(/\n\n+/).forEach(function(para){
-      var p=document.createElement("p"); p.textContent=para.trim(); body.appendChild(p);
-    });
+    letterText = String(row.message||"");
+    $("ov-body").innerHTML="";
     statusEl.hidden=true; stage.hidden=false;
+  }
+
+  /* ---------------- ÁUDIO (sintetizado, sem arquivos) ---------------- */
+  var AC=null, master=null, musicOn=true, loopTimer=null;
+  // Canon in D (Pachelbel) — [baixo, [notas do arpejo]]
+  var prog=[
+    [73.42,[293.66,369.99,440.00]],  // D
+    [110.00,[277.18,329.63,440.00]], // A
+    [123.47,[293.66,369.99,493.88]], // Bm
+    [92.50,[277.18,369.99,440.00]],  // F#m
+    [98.00,[293.66,392.00,493.88]],  // G
+    [73.42,[293.66,369.99,440.00]],  // D
+    [98.00,[293.66,392.00,493.88]],  // G
+    [110.00,[277.18,329.63,440.00]]  // A
+  ];
+
+  function initAudio(){
+    if(AC) { if(AC.state==="suspended") AC.resume(); return; }
+    try{
+      AC=new (window.AudioContext||window.webkitAudioContext)();
+    }catch(e){ AC=null; return; }
+    master=AC.createGain();
+    master.gain.value = musicOn ? 0.6 : 0;
+    master.connect(AC.destination);
+    // leve ambiência (eco suave)
+    var delay=AC.createDelay(); delay.delayTime.value=0.28;
+    var fb=AC.createGain(); fb.gain.value=0.22;
+    var wet=AC.createGain(); wet.gain.value=0.30;
+    master.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(AC.destination);
+  }
+
+  function tone(freq, when, dur, level, type, cutoff){
+    var o=AC.createOscillator(), g=AC.createGain(), f=AC.createBiquadFilter();
+    o.type=type; o.frequency.value=freq;
+    f.type="lowpass"; f.frequency.value=cutoff||3000;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(level, when+0.05);
+    g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+    o.connect(f); f.connect(g); g.connect(master);
+    o.start(when); o.stop(when+dur+0.05);
+  }
+
+  function noise(when, dur, type, cutoff, level){
+    var n=Math.floor(AC.sampleRate*dur), buf=AC.createBuffer(1,n,AC.sampleRate), d=buf.getChannelData(0);
+    for(var i=0;i<n;i++) d[i]=Math.random()*2-1;
+    var src=AC.createBufferSource(); src.buffer=buf;
+    var f=AC.createBiquadFilter(); f.type=type; f.frequency.value=cutoff;
+    var g=AC.createGain();
+    g.gain.setValueAtTime(level, when);
+    g.gain.exponentialRampToValueAtTime(0.0001, when+dur);
+    src.connect(f); f.connect(g); g.connect(master);
+    src.start(when); src.stop(when+dur);
+  }
+
+  function scheduleLoop(t0){
+    var chordDur=3.2, arp=chordDur/4, t=t0;
+    prog.forEach(function(ch){
+      tone(ch[0], t, chordDur*0.98, 0.09, "sine", 1100);       // baixo
+      var pat=[ch[1][0],ch[1][1],ch[1][2],ch[1][1]];
+      for(var i=0;i<4;i++) tone(pat[i], t+i*arp, arp*0.92, 0.06, "triangle", 2600);
+      t+=chordDur;
+    });
+    return t-t0;
+  }
+  function startMusic(){
+    if(!AC) return;
+    var len=scheduleLoop(AC.currentTime+0.06);
+    (function loop(){
+      loopTimer=setTimeout(function(){
+        if(!AC) return;
+        var l=scheduleLoop(AC.currentTime+0.02);
+        loop();
+      }, (len-0.35)*1000);
+    })();
+  }
+  function crackSound(){ if(!AC) return; var t=AC.currentTime; noise(t,0.18,"bandpass",1800,0.5); tone(90,t,0.22,0.18,"sine",300); }
+  function paperSound(){ if(!AC) return; noise(AC.currentTime,0.5,"highpass",1700,0.12); }
+
+  // botão de som
+  $("sound-toggle").onclick=function(){
+    musicOn=!musicOn;
+    this.textContent = musicOn ? "🔊" : "🔇";
+    if(master) master.gain.value = musicOn ? 0.6 : 0;
+    if(musicOn && AC && AC.state==="suspended") AC.resume();
+  };
+
+  /* ---------------- digitação da carta ---------------- */
+  function typeMessage(text, reduce){
+    var body=$("ov-body"); body.innerHTML="";
+    var paras=String(text).split(/\n\n+/).map(function(s){return s.trim();}).filter(Boolean);
+    if(reduce){ paras.forEach(function(p){var el=document.createElement("p"); el.textContent=p; body.appendChild(el);}); return; }
+    var pi=0;
+    (function nextPara(){
+      if(pi>=paras.length) return;
+      var el=document.createElement("p"); el.className="typing"; body.appendChild(el);
+      var txt=paras[pi], ci=0;
+      (function typeChar(){
+        if(ci<=txt.length){ el.textContent=txt.slice(0,ci); ci++; body.scrollTop=body.scrollHeight; setTimeout(typeChar,24); }
+        else { el.classList.remove("typing"); pi++; setTimeout(nextPara,300); }
+      })();
+    })();
+  }
+
+  /* ---------------- corações caindo ---------------- */
+  function spawnPetals(){
+    for(var i=0;i<14;i++){
+      var p=document.createElement("span"); p.className="petal"; p.textContent="❤";
+      p.style.left=(Math.random()*100)+"vw";
+      p.style.fontSize=(0.8+Math.random()*0.9)+"rem";
+      p.style.color=Math.random()<0.5 ? "#C97E7E" : "#B7324A";
+      p.style.animationDuration=(6+Math.random()*5)+"s";
+      p.style.animationDelay=(Math.random()*2.5)+"s";
+      document.body.appendChild(p);
+      (function(el){ setTimeout(function(){ el.remove(); }, 15000); })(p);
+    }
   }
 
   function breakSeal(){
     if(scene.classList.contains("is-open")) return;
     var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if(reduce){ scene.classList.add("is-open"); spawnMotes(); return; }
+    initAudio();
+    crackSound();
+    startMusic();
+    var onOpen=function(){
+      scene.classList.add("is-open");
+      paperSound();
+      spawnMotes(); spawnPetals();
+      typeMessage(letterText, reduce);
+    };
+    if(reduce){ onOpen(); return; }
     scene.classList.add("is-opening");
     clearTimeout(openTimer);
-    openTimer=setTimeout(function(){ scene.classList.add("is-open"); spawnMotes(); }, 1150);
+    openTimer=setTimeout(onOpen, 1150);
   }
   $("open-btn").onclick=breakSeal;
 
