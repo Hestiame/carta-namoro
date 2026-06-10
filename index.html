@@ -107,6 +107,8 @@
   .btn:hover{transform:translateY(-1px)}
   .btn.ghost{background:transparent; color:var(--bordeaux-deep); box-shadow:inset 0 0 0 1px rgba(110,20,35,.4)}
   .btn.gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:var(--bordeaux-deep); box-shadow:0 6px 16px rgba(194,160,74,.3)}
+  .btn.danger{background:transparent; color:#8A1B2D; box-shadow:inset 0 0 0 1px rgba(138,27,45,.45)}
+  .btn.danger:hover{background:#8A1B2D; color:#FBE9D0}
 
   .list-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.8rem}
   .roster{display:flex; flex-direction:column; gap:.6rem}
@@ -470,12 +472,24 @@
     letters.forEach(function(l){
       var row=document.createElement("div"); row.className="roster-item";
       row.innerHTML='<div class="who"><div class="name"></div><div class="meta"></div></div>'+
-        '<button class="btn ghost mini">Pré-visualizar</button>';
+        '<button class="btn ghost mini act-prev">Pré-visualizar</button>'+
+        '<button class="btn danger mini act-del">Remover</button>';
       row.querySelector(".name").textContent=l.name;
       row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code;
-      row.querySelector("button").onclick=function(){openLetter(l);};
+      row.querySelector(".act-prev").onclick=function(){openLetter(l);};
+      row.querySelector(".act-del").onclick=function(){removeCarta(l);};
       rosterEl.appendChild(row);
     });
+  }
+
+  // ---- remover carta ----
+  async function removeCarta(l){
+    if(!sb) return;
+    if(!confirm("Remover a carta de "+l.name+" ("+l.code+")?\n\nO QR Code dela deixará de funcionar. Esta ação não pode ser desfeita.")) return;
+    var res=await sb.from("cartas").delete().eq("code", l.code);
+    if(res.error){ alert("Não foi possível remover: "+res.error.message); return; }
+    letters=letters.filter(function(x){ return x.code!==l.code; });
+    renderRoster(); renderCards();
   }
 
   // ---- vouchers (impressão) ----
