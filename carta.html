@@ -100,6 +100,11 @@
     font-size:1.05rem; cursor:pointer; display:grid; place-items:center; transition:.15s}
   .sound-toggle:hover{background:rgba(252,247,236,.2)}
 
+  /* player do YouTube: presente para tocar, mas fora de vista */
+  #yt-player{position:fixed; width:1px; height:1px; left:-9999px; top:-9999px; opacity:.01; pointer-events:none; z-index:-1}
+
+  .sign.anon{font-size:1.5rem; font-style:italic}
+
   .petal{position:fixed; top:-32px; z-index:1; pointer-events:none; opacity:0;
     animation:fall linear forwards}
   @keyframes fall{
@@ -125,7 +130,8 @@
 <body>
 <div class="scene" id="scene">
   <div class="candle" aria-hidden="true"></div>
-  <button class="sound-toggle" id="sound-toggle" aria-label="Ligar ou desligar o som">🔊</button>
+  <button class="sound-toggle" id="sound-toggle" aria-label="Ligar ou desligar o som">&#9834;</button>
+  <div id="yt-player" aria-hidden="true"></div>
 
   <p class="status" id="status">Procurando seu envelope…<span class="small">Cartas Seladas</span></p>
 
@@ -165,6 +171,17 @@
   var SUPABASE_URL      = "https://jtxmfxzlkwkljpuadnox.supabase.co";
   var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0eG1meHpsa3drbGpwdWFkbm94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDczNTIsImV4cCI6MjA5NjY4MzM1Mn0.VKr82fU7yv4USv2sf_AvLxfelv8lDy97C_4u3DuGh5I";
 
+  /* === MÚSICA DO YOUTUBE (opcional) ===
+     Cole aqui o link do YouTube que você quer tocar na carta.
+     Ex.: "https://www.youtube.com/watch?v=XXXXXXXXXXX"
+     Deixe "" (vazio) para usar a opção abaixo. */
+  var YOUTUBE = "";
+
+  /* === MÚSICA EM ARQUIVO (recomendado) ===
+     Nome do arquivo de música que fica na mesma pasta do site.
+     Sem anúncio e toca na hora. Deixe "" para usar o Canon sintetizado. */
+  var MUSIC_FILE = "canon_sinte.mp3";
+
   var CONFIG_OK = SUPABASE_URL.indexOf("SEU-PROJETO") === -1
                && SUPABASE_ANON_KEY.indexOf("SUA-CHAVE") === -1;
 
@@ -181,7 +198,9 @@
     $("ov-toname").textContent   = row.recipient_name;
     $("ov-note").textContent     = "Para "+row.recipient_name+" · "+row.recipient_turma;
     $("ov-date").textContent     = new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
-    $("ov-sign").innerHTML       = row.sender_name ? ("Com carinho,<br>"+escapeHtml(row.sender_name)) : "Com carinho,";
+    var sign=$("ov-sign");
+    if(row.sender_name){ sign.className="sign"; sign.innerHTML="Com carinho,<br>"+escapeHtml(row.sender_name); }
+    else { sign.className="sign anon"; sign.textContent="Admirador secreto"; }
     letterText = String(row.message||"");
     $("ov-body").innerHTML="";
     statusEl.hidden=true; stage.hidden=false;
@@ -263,12 +282,61 @@
   function crackSound(){ if(!AC) return; var t=AC.currentTime; noise(t,0.18,"bandpass",1800,0.5); tone(90,t,0.22,0.18,"sine",300); }
   function paperSound(){ if(!AC) return; noise(AC.currentTime,0.5,"highpass",1700,0.12); }
 
-  // botão de som
+  /* ---------------- música do YouTube (opcional) ---------------- */
+  function parseYT(s){
+    if(!s) return "";
+    var m=String(s).match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/);
+    if(m) return m[1];
+    if(/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
+    return "";
+  }
+  var ytId=parseYT(YOUTUBE), useYT=!!ytId, ytPlayer=null, ytReady=false, ytPending=false;
+  function loadYT(){
+    if(!useYT) return;
+    var tag=document.createElement("script"); tag.src="https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  }
+  window.onYouTubeIframeAPIReady=function(){
+    ytPlayer=new YT.Player("yt-player",{
+      videoId:ytId,
+      playerVars:{autoplay:0,controls:0,disablekb:1,fs:0,modestbranding:1,rel:0,playsinline:1,loop:1,playlist:ytId},
+      events:{ onReady:function(){ ytReady=true; if(ytPending) ytPlay(); } }
+    });
+  };
+  function ytPlay(){
+    if(!ytPlayer){ ytPending=true; return; }
+    try{ ytPlayer.unMute(); ytPlayer.setVolume(70); ytPlayer.playVideo(); }catch(e){}
+  }
+  loadYT();
+
+  /* ---------------- música em arquivo (local) ---------------- */
+  var useFile=(!useYT && !!MUSIC_FILE), audioEl=null, fadeT=null, FILE_VOL=0.85;
+  if(useFile){
+    audioEl=new Audio(MUSIC_FILE);
+    audioEl.loop=true; audioEl.preload="auto"; audioEl.volume=0;
+    audioEl.addEventListener("error", function(){   // arquivo não encontrado → Canon sintetizado
+      useFile=false; audioEl=null; if(!useYT && scene.classList.contains("is-opening")) startMusic();
+    });
+  }
+  function fileMusicStart(){
+    if(!audioEl) return;
+    var pl=audioEl.play(); if(pl&&pl.catch) pl.catch(function(){});
+    var v=0; clearInterval(fadeT);
+    fadeT=setInterval(function(){
+      if(!musicOn){ clearInterval(fadeT); return; }
+      v=Math.min(FILE_VOL, v+0.05); audioEl.volume=v;
+      if(v>=FILE_VOL) clearInterval(fadeT);
+    },80);
+  }
+
+  // botão de som (♪ / ✕)
   $("sound-toggle").onclick=function(){
     musicOn=!musicOn;
-    this.textContent = musicOn ? "🔊" : "🔇";
+    this.textContent = musicOn ? "\u266A" : "\u2715";
     if(master) master.gain.value = musicOn ? 0.6 : 0;
     if(musicOn && AC && AC.state==="suspended") AC.resume();
+    if(useYT && ytPlayer){ try{ musicOn ? ytPlayer.unMute() : ytPlayer.mute(); }catch(e){} }
+    if(audioEl){ if(musicOn){ audioEl.volume=FILE_VOL; audioEl.play().catch(function(){}); } else { audioEl.pause(); } }
   };
 
   /* ---------------- digitação da carta ---------------- */
@@ -288,18 +356,28 @@
     })();
   }
 
-  /* ---------------- corações caindo ---------------- */
-  function spawnPetals(){
-    for(var i=0;i<14;i++){
-      var p=document.createElement("span"); p.className="petal"; p.textContent="❤";
-      p.style.left=(Math.random()*100)+"vw";
-      p.style.fontSize=(0.8+Math.random()*0.9)+"rem";
-      p.style.color=Math.random()<0.5 ? "#C97E7E" : "#B7324A";
-      p.style.animationDuration=(6+Math.random()*5)+"s";
-      p.style.animationDelay=(Math.random()*2.5)+"s";
-      document.body.appendChild(p);
-      (function(el){ setTimeout(function(){ el.remove(); }, 15000); })(p);
-    }
+  /* ---------------- corações caindo (infinito, variados) ---------------- */
+  var HEARTS=["\u2764","\u2665","\u2765","\u2763","\u2661"];        // ❤ ♥ ❥ ❣ ♡
+  var REDS=["#E63950","#C0182B","#B7324A","#FF4D6D","#8B1E2D","#D72638","#E84855"];
+  var heartTimer=null;
+  function dropHeart(){
+    var p=document.createElement("span"); p.className="petal";
+    p.textContent=HEARTS[(Math.random()*HEARTS.length)|0];
+    p.style.left=(Math.random()*100)+"vw";
+    p.style.fontSize=(0.7+Math.random()*1.5)+"rem";
+    p.style.color=REDS[(Math.random()*REDS.length)|0];
+    var dur=6+Math.random()*6;
+    p.style.animationDuration=dur+"s";
+    document.body.appendChild(p);
+    setTimeout(function(){ p.remove(); }, (dur+1)*1000);
+  }
+  function startHearts(){
+    for(var i=0;i<10;i++) setTimeout(dropHeart, Math.random()*1200);
+    if(heartTimer) clearInterval(heartTimer);
+    heartTimer=setInterval(function(){
+      var n=1+((Math.random()*3)|0);
+      for(var i=0;i<n;i++) dropHeart();
+    }, 700);
   }
 
   function breakSeal(){
@@ -307,11 +385,13 @@
     var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     initAudio();
     crackSound();
-    startMusic();
+    if(useYT){ if(ytReady) ytPlay(); else ytPending=true; }
+    else if(useFile){ fileMusicStart(); }
+    else { startMusic(); }
     var onOpen=function(){
       scene.classList.add("is-open");
       paperSound();
-      spawnMotes(); spawnPetals();
+      spawnMotes(); startHearts();
       typeMessage(letterText, reduce);
     };
     if(reduce){ onOpen(); return; }
