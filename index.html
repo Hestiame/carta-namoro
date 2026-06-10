@@ -502,7 +502,13 @@
     if(!num){ alert("Esta carta não tem número de WhatsApp."); return; }
     if(num.length<=11) num="55"+num;        // sem código do país → assume Brasil (55)
     var link=SITE_URL+"carta.html?t="+encodeURIComponent(l.token);
-    var msg="Oi "+l.name+"! 💌\n\nChegou uma carta selada pra você.\nÉ só abrir aqui: "+link;
+    var msg=
+      "Oi, "+l.name+"! 💌\n\n"+
+      "Você recebeu uma carta selada.\n"+
+      "Talvez você já tenha ouvido algumas dessas palavras antes, mas desta vez elas chegaram de uma forma especial, guardadas com carinho para serem lidas no momento certo.\n\n"+
+      "✨ Seu acesso chegou.\n"+
+      "Abra quando quiser e descubra o que foi escrito especialmente para você. ❤️\n\n"+
+      link;
     window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg), "_blank");
   }
 
