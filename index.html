@@ -109,6 +109,8 @@
   .btn.gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:var(--bordeaux-deep); box-shadow:0 6px 16px rgba(194,160,74,.3)}
   .btn.danger{background:transparent; color:#8A1B2D; box-shadow:inset 0 0 0 1px rgba(138,27,45,.45)}
   .btn.danger:hover{background:#8A1B2D; color:#FBE9D0}
+  .btn.wa{background:transparent; color:#1f7a4d; box-shadow:inset 0 0 0 1px rgba(37,211,102,.55)}
+  .btn.wa:hover{background:#1f7a4d; color:#EAFBF1}
 
   .list-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.8rem}
   .roster{display:flex; flex-direction:column; gap:.6rem}
@@ -348,6 +350,10 @@
           <span class="lab">De quem é a carta? (opcional)</span>
           <input id="f-sender" placeholder="Ex.: Lucas — ou deixe em branco para anônimo">
         </label>
+        <label>
+          <span class="lab">WhatsApp da pessoa (opcional)</span>
+          <input id="f-wa" inputmode="numeric" placeholder="Ex.: 85 98765-4321 (só números)">
+        </label>
         <button class="btn" type="submit">Gerar carta &amp; QR Code</button>
         <p class="hint" id="last-code" hidden></p>
       </form>
@@ -476,15 +482,28 @@
     rosterEl.innerHTML="";
     letters.forEach(function(l){
       var row=document.createElement("div"); row.className="roster-item";
+      var waBtn = l.phone ? '<button class="btn wa mini act-wa">WhatsApp</button>' : '';
       row.innerHTML='<div class="who"><div class="name"></div><div class="meta"></div></div>'+
         '<button class="btn ghost mini act-prev">Pré-visualizar</button>'+
+        waBtn+
         '<button class="btn danger mini act-del">Remover</button>';
       row.querySelector(".name").textContent=l.name;
-      row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code;
+      row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code+(l.phone?"  ·  📱":"");
       row.querySelector(".act-prev").onclick=function(){openLetter(l);};
       row.querySelector(".act-del").onclick=function(){removeCarta(l);};
+      var wa=row.querySelector(".act-wa"); if(wa) wa.onclick=function(){ enviarWhatsApp(l); };
       rosterEl.appendChild(row);
     });
+  }
+
+  // ---- abrir o WhatsApp da pessoa com a carta já pronta ----
+  function enviarWhatsApp(l){
+    var num=(l.phone||"").replace(/\D/g,"");
+    if(!num){ alert("Esta carta não tem número de WhatsApp."); return; }
+    if(num.length<=11) num="55"+num;        // sem código do país → assume Brasil (55)
+    var link=SITE_URL+"carta.html?t="+encodeURIComponent(l.token);
+    var msg="Oi "+l.name+"! 💌\n\nChegou uma carta selada pra você.\nÉ só abrir aqui: "+link;
+    window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg), "_blank");
   }
 
   // ---- remover carta ----
@@ -583,6 +602,7 @@
     if(!sb) return;
     var name=$("f-name").value.trim(), turma=$("f-turma").value.trim(), msg=$("f-msg").value.trim();
     var sender=$("f-sender").value.trim();
+    var wa=$("f-wa").value.replace(/\D/g,"");
     if(!name||!turma||!msg) return;
     var btn=this.querySelector('button[type="submit"]'); btn.disabled=true;
     var lc=$("last-code");
@@ -591,8 +611,8 @@
     for(var attempt=0; attempt<5 && !row; attempt++){
       var c=code();
       var res=await sb.from("cartas").insert({
-        code:c, recipient_name:name, recipient_turma:turma, message:msg, sender_name:(sender||null)
-      }).select("code, public_token, recipient_name, recipient_turma, message, sender_name").single();
+        code:c, recipient_name:name, recipient_turma:turma, message:msg, sender_name:(sender||null), recipient_phone:(wa||null)
+      }).select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone").single();
       if(res.error){
         lastErr=res.error;
         if(res.error.code==="23505") continue;   // código repetido → tenta outro
@@ -618,13 +638,13 @@
 
   // ---- mapeia uma linha do banco para o formato usado na tela ----
   function mapRow(r){
-    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name };
+    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name, phone:r.recipient_phone };
   }
 
   // ---- carrega as cartas do banco ----
   async function loadCartas(){
     var res=await sb.from("cartas")
-      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, created_at")
+      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, created_at")
       .order("created_at",{ascending:false});
     if(res.error){
       rosterEl.innerHTML='<div class="empty">Erro ao carregar: '+res.error.message+'</div>';
