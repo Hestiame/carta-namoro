@@ -33,7 +33,7 @@
   @keyframes flicker{0%,100%{opacity:.85;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}}
 
   .status{position:relative; z-index:2; text-align:center; color:var(--gold-soft);
-    font-size:1.3rem; font-style:italic; max-width:24rem; line-height:1.5}
+    font-size:1.18rem; font-style:italic; max-width:32rem; line-height:1.55}
   .status .small{display:block; font-family:"JetBrains Mono",monospace; font-style:normal; font-size:.62rem;
     letter-spacing:.25em; text-transform:uppercase; opacity:.6; margin-top:.7rem}
   .status[hidden]{display:none}
@@ -189,6 +189,13 @@
   var scene=$("scene"), statusEl=$("status"), stage=$("stage"), openTimer=null;
 
   function fail(msg){ statusEl.innerHTML=msg+'<span class="small">Cartas Seladas</span>'; statusEl.hidden=false; stage.hidden=true; }
+
+  // mensagem mostrada quando a carta não existe mais (removida) ou o link é inválido
+  var MSG_PERDIDA =
+    "\uD83D\uDC8C Sua carta se perdeu no mar.<br>"+
+    "As ondas levaram palavras que foram escritas com carinho, e a maré acabou escondendo um pedaço da mensagem que deveria chegar até você. Nem todas as cartas encontram seu destino, mas isso não significa que os sentimentos dentro delas deixem de existir.<br><br>"+
+    "\uD83C\uDF0A Às vezes, a vida leva embora aquilo que esperávamos receber. Mas ela também nos ensina que novos caminhos sempre surgem para quem continua seguindo em frente.<br><br>"+
+    "\u2728 O que é verdadeiro pode até se perder pelo caminho, mas nunca deixa de existir no coração de quem acredita.<br>";
 
   function escapeHtml(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
@@ -423,7 +430,7 @@
       var res=await sb.rpc("abrir_carta", { p_token: token });
       if(res.error){ fail("Não foi possível abrir esta carta agora. Tente novamente em instantes."); return; }
       var row=res.data && res.data[0];
-      if(!row){ fail("Este envelope não corresponde a nenhuma carta."); return; }
+      if(!row){ fail(MSG_PERDIDA); return; }
       reveal(row);
     }catch(err){
       fail("Não foi possível abrir esta carta agora.");
