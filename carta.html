@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Uma carta para você</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,500;0,6..96,600&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&family=Pinyon+Script&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#1B1410; --bordeaux:#6E1423; --bordeaux-deep:#46101A;
+    --gold:#C2A04A; --gold-soft:#E3CC8E; --paper-white:#FCF7EC;
+    --night:#170A0F; --night-2:#2C111A;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0; min-height:100%}
+  body{
+    font-family:"Cormorant Garamond",Georgia,serif; color:var(--ink);
+    background:
+      radial-gradient(60% 50% at 50% 34%, rgba(168,60,40,.30), transparent 70%),
+      radial-gradient(120% 100% at 50% 120%, var(--night-2), var(--night) 70%);
+    -webkit-font-smoothing:antialiased;
+  }
+  :focus-visible{outline:none; box-shadow:0 0 0 3px rgba(194,160,74,.55); border-radius:6px}
+
+  .scene{position:relative; min-height:100vh; display:grid; place-items:center; padding:1.2rem; overflow:hidden}
+  .candle{position:absolute; top:30%; left:50%; width:340px; height:340px; transform:translate(-50%,-50%); border-radius:50%;
+    background:radial-gradient(circle, rgba(255,210,150,.22), transparent 65%); filter:blur(8px); pointer-events:none;
+    animation:flicker 4.5s ease-in-out infinite}
+  @keyframes flicker{0%,100%{opacity:.85;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}}
+
+  .status{position:relative; z-index:2; text-align:center; color:var(--gold-soft);
+    font-size:1.3rem; font-style:italic; max-width:24rem; line-height:1.5}
+  .status .small{display:block; font-family:"JetBrains Mono",monospace; font-style:normal; font-size:.62rem;
+    letter-spacing:.25em; text-transform:uppercase; opacity:.6; margin-top:.7rem}
+  .status[hidden]{display:none}
+
+  .stage{position:relative; width:min(420px,92vw); z-index:2; text-align:center}
+  .stage[hidden]{display:none}
+
+  .envelope{position:relative; width:100%; aspect-ratio:7/5; margin:0 auto}
+  .env-body{position:absolute; inset:0; border-radius:10px;
+    background:linear-gradient(180deg,#F2E4C4,#E6D3A8);
+    box-shadow:0 24px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(194,160,74,.6)}
+  .env-body::after{content:""; position:absolute; inset:10px; border:1px solid rgba(110,20,35,.18); border-radius:6px}
+  .env-flap{position:absolute; left:0; top:0; width:100%; height:62%;
+    background:linear-gradient(180deg,#EBDAB4,#DFC998); clip-path:polygon(0 0,100% 0,50% 100%);
+    transform-origin:top; transition:transform 1s cubic-bezier(.5,0,.2,1);
+    box-shadow:0 2px 4px rgba(70,16,26,.15); z-index:4; backface-visibility:hidden}
+  .wax{position:absolute; left:50%; top:54%; width:74px; height:74px; transform:translate(-50%,-50%); z-index:5}
+  .wax .half{position:absolute; top:0; width:50%; height:100%; overflow:hidden;
+    transition:transform .7s cubic-bezier(.4,0,.2,1), opacity .7s}
+  .wax .l{left:0} .wax .r{right:0}
+  .wax .half::before{content:""; position:absolute; top:0; width:74px; height:74px; border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, #9A2233, var(--bordeaux-deep) 70%);
+    box-shadow:inset 0 0 0 3px rgba(226,204,142,.45), 0 3px 8px rgba(0,0,0,.4)}
+  .wax .l::before{left:0} .wax .r::before{right:0}
+  .wax .emblem{position:absolute; inset:0; display:grid; place-items:center; color:var(--gold-soft); font-size:1.7rem; z-index:1; transition:opacity .4s}
+
+  .env-caption{margin-top:1.4rem; color:var(--gold-soft)}
+  .env-caption .to{font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.3em; text-transform:uppercase; opacity:.7}
+  .env-caption .name{font-family:"Cormorant Garamond",serif; font-size:1.7rem; color:#F6E9CB; margin:.15rem 0 1rem}
+  .open-btn{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:var(--bordeaux-deep); border:none;
+    border-radius:999px; padding:.65rem 1.5rem; font-size:1.05rem; letter-spacing:.02em; box-shadow:0 8px 20px rgba(0,0,0,.35); cursor:pointer}
+
+  .letter{position:fixed; left:50%; top:50%; z-index:5; width:min(560px,94vw); max-height:88vh; overflow:auto;
+    padding:clamp(1.6rem,5vw,2.6rem);
+    background:linear-gradient(180deg,var(--paper-white),#F4E8CC);
+    border-radius:6px; box-shadow:0 30px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(194,160,74,.5);
+    opacity:0; pointer-events:none;
+    transform:translate(-50%,-50%) translateY(28px) scale(.96);
+    transition:opacity .7s ease .35s, transform .9s cubic-bezier(.2,.7,.2,1) .35s}
+  .letter::before{content:""; position:absolute; inset:9px; border:1px solid rgba(194,160,74,.4); border-radius:4px; pointer-events:none}
+  .flourish{text-align:center; color:var(--gold); font-size:1.2rem; letter-spacing:.5em; margin-bottom:.3rem}
+  .letter .date{text-align:center; font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.26em; text-transform:uppercase; color:var(--bordeaux); opacity:.7}
+  .letter .to-name{font-family:"Cormorant Garamond",serif; font-style:italic; font-size:1.9rem; color:var(--bordeaux-deep); text-align:center; margin:.5rem 0 1.2rem}
+  .letter .body p{font-size:1.22rem; line-height:1.62; color:#2A1B16; margin:0 0 1rem}
+  .letter .sign{font-family:"Pinyon Script",cursive; font-size:2.1rem; color:var(--bordeaux); text-align:right; margin-top:.6rem; line-height:1}
+  .letter .seal-note{margin-top:1.6rem; padding-top:1rem; border-top:1px dashed rgba(110,20,35,.25); text-align:center;
+    font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.2em; text-transform:uppercase; color:var(--bordeaux); opacity:.7}
+
+  /* estados */
+  .scene.is-opening .wax .l{transform:translateX(-26px) rotate(-38deg) translateY(20px); opacity:0}
+  .scene.is-opening .wax .r{transform:translateX(26px) rotate(38deg) translateY(20px); opacity:0}
+  .scene.is-opening .wax .emblem{opacity:0}
+  .scene.is-opening .env-flap{transform:rotateX(178deg)}
+  .scene.is-open .envelope{opacity:0; transform:translateY(-12px) scale(.9); transition:opacity .6s, transform .8s; pointer-events:none}
+  .scene.is-open .env-caption{opacity:0; pointer-events:none; transition:opacity .4s}
+  .scene.is-open .letter{opacity:1; transform:translate(-50%,-50%) translateY(0) scale(1); pointer-events:auto}
+
+  .mote{position:absolute; width:5px; height:5px; border-radius:50%; background:rgba(226,204,142,.6); z-index:2; pointer-events:none;
+    animation:rise 9s linear infinite; opacity:0}
+  @keyframes rise{0%{transform:translateY(20px);opacity:0}15%{opacity:.7}100%{transform:translateY(-220px);opacity:0}}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important}
+    .letter,.env-flap,.wax .half{transition:opacity .3s !important}
+  }
+</style>
+</head>
+<body>
+<div class="scene" id="scene">
+  <div class="candle" aria-hidden="true"></div>
+
+  <p class="status" id="status">Procurando seu envelope…<span class="small">Cartas Seladas</span></p>
+
+  <div class="stage" id="stage" hidden>
+    <div class="envelope" aria-hidden="true">
+      <div class="env-body"></div>
+      <div class="env-flap"></div>
+      <div class="wax">
+        <span class="half l"></span>
+        <span class="half r"></span>
+        <span class="emblem">♥</span>
+      </div>
+    </div>
+    <div class="env-caption">
+      <p class="to">Uma carta para</p>
+      <p class="name" id="ov-name">—</p>
+      <button class="open-btn" id="open-btn">Romper o selo</button>
+    </div>
+
+    <article class="letter" id="letter">
+      <div class="flourish">❧</div>
+      <p class="date" id="ov-date"></p>
+      <p class="to-name" id="ov-toname">—</p>
+      <div class="body" id="ov-body"></div>
+      <p class="sign">Com carinho,</p>
+      <p class="seal-note" id="ov-note">—</p>
+    </article>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* === mesmas credenciais do projeto Supabase === */
+  var SUPABASE_URL      = "https://jtxmfxzlkwkljpuadnox.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0eG1meHpsa3drbGpwdWFkbm94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDczNTIsImV4cCI6MjA5NjY4MzM1Mn0.VKr82fU7yv4USv2sf_AvLxfelv8lDy97C_4u3DuGh5I";
+
+  var CONFIG_OK = SUPABASE_URL.indexOf("SEU-PROJETO") === -1
+               && SUPABASE_ANON_KEY.indexOf("SUA-CHAVE") === -1;
+
+  var $=function(id){return document.getElementById(id);};
+  var scene=$("scene"), statusEl=$("status"), stage=$("stage"), openTimer=null;
+
+  function fail(msg){ statusEl.innerHTML=msg+'<span class="small">Cartas Seladas</span>'; statusEl.hidden=false; stage.hidden=true; }
+
+  function reveal(row){
+    $("ov-name").textContent     = row.recipient_name;
+    $("ov-toname").textContent   = row.recipient_name;
+    $("ov-note").textContent     = "Para "+row.recipient_name+" · "+row.recipient_turma;
+    $("ov-date").textContent     = new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
+    var body=$("ov-body"); body.innerHTML="";
+    String(row.message).split(/\n\n+/).forEach(function(para){
+      var p=document.createElement("p"); p.textContent=para.trim(); body.appendChild(p);
+    });
+    statusEl.hidden=true; stage.hidden=false;
+  }
+
+  function breakSeal(){
+    if(scene.classList.contains("is-open")) return;
+    var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if(reduce){ scene.classList.add("is-open"); spawnMotes(); return; }
+    scene.classList.add("is-opening");
+    clearTimeout(openTimer);
+    openTimer=setTimeout(function(){ scene.classList.add("is-open"); spawnMotes(); }, 1150);
+  }
+  $("open-btn").onclick=breakSeal;
+
+  var motes=[];
+  function spawnMotes(){
+    for(var i=0;i<8;i++){
+      var m=document.createElement("span"); m.className="mote";
+      m.style.left=(15+Math.random()*70)+"%";
+      m.style.top=(40+Math.random()*40)+"%";
+      m.style.animationDelay=(Math.random()*6)+"s";
+      m.style.animationDuration=(7+Math.random()*5)+"s";
+      scene.appendChild(m); motes.push(m);
+    }
+  }
+
+  (async function init(){
+    if(!CONFIG_OK){ fail("Configuração pendente. Preencha as credenciais do Supabase neste arquivo."); return; }
+    var token=new URLSearchParams(location.search).get("t");
+    if(!token){ fail("Este link não aponta para nenhuma carta."); return; }
+
+    try{
+      var sb=window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ persistSession:false } });
+      var res=await sb.rpc("abrir_carta", { p_token: token });
+      if(res.error){ fail("Não foi possível abrir esta carta agora. Tente novamente em instantes."); return; }
+      var row=res.data && res.data[0];
+      if(!row){ fail("Este envelope não corresponde a nenhuma carta."); return; }
+      reveal(row);
+    }catch(err){
+      fail("Não foi possível abrir esta carta agora.");
+    }
+  })();
+})();
+</script>
+</body>
+</html>
