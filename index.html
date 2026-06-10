@@ -533,7 +533,7 @@
         waBtn+
         '<button class="btn danger mini act-del">Remover</button>';
       row.querySelector(".name").textContent=l.name;
-      row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code+(l.phone?"  ·  📱":"");
+      row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code+(l.phone?"  ·  \uD83D\uDCF1":"");
       var op=row.querySelector(".opened"); op.textContent=fmtOpened(l);
       if(l.opens>0) op.classList.add("on");
       row.querySelector(".act-prev").onclick=function(){openLetter(l);};
@@ -550,12 +550,13 @@
     if(!num){ alert("Esta carta não tem número de WhatsApp."); return; }
     if(num.length<=11) num="55"+num;        // sem código do país → assume Brasil (55)
     var link=SITE_URL+"carta.html?t="+encodeURIComponent(l.token);
+    var EMO_CARTA="\uD83D\uDC8C", EMO_BRILHO="\u2728", EMO_CORACAO="\u2764\uFE0F";
     var msg=
-      "Oi, "+l.name+"! 💌\n\n"+
+      "Oi, "+l.name+"! "+EMO_CARTA+"\n\n"+
       "Você recebeu uma carta selada.\n"+
       "Talvez você já tenha ouvido algumas dessas palavras antes, mas desta vez elas chegaram de uma forma especial, guardadas com carinho para serem lidas no momento certo.\n\n"+
-      "✨ Seu acesso chegou.\n"+
-      "Abra quando quiser e descubra o que foi escrito especialmente para você. ❤️\n\n"+
+      EMO_BRILHO+" Seu acesso chegou.\n"+
+      "Abra quando quiser e descubra o que foi escrito especialmente para você. "+EMO_CORACAO+"\n\n"+
       link;
     window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg), "_blank");
   }
