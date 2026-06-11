@@ -50,7 +50,10 @@
     background:linear-gradient(180deg,#EBDAB4,#DFC998); clip-path:polygon(0 0,100% 0,50% 100%);
     transform-origin:top; transition:transform 1s cubic-bezier(.5,0,.2,1);
     box-shadow:0 2px 4px rgba(70,16,26,.15); z-index:4; backface-visibility:hidden}
-  .wax{position:absolute; left:50%; top:54%; width:74px; height:74px; transform:translate(-50%,-50%); z-index:5}
+  .wax{position:absolute; left:50%; top:54%; width:74px; height:74px; transform:translate(-50%,-50%); z-index:5;
+    animation:sealpulse 2.2s ease-in-out infinite}
+  @keyframes sealpulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.07)}}
+  .scene.is-opening .wax, .scene.is-open .wax{animation:none}
   .wax .half{position:absolute; top:0; width:50%; height:100%; overflow:hidden;
     transition:transform .7s cubic-bezier(.4,0,.2,1), opacity .7s}
   .wax .l{left:0} .wax .r{right:0}
@@ -105,6 +108,21 @@
 
   .sign.anon{font-size:1.5rem; font-style:italic}
 
+  .guess{margin-top:1.2rem; text-align:center}
+  .guess-q{font-family:"Cormorant Garamond",serif; font-style:italic; font-size:1.3rem; color:var(--bordeaux-deep); margin:0 0 .6rem}
+  .guess-row{display:flex; gap:.5rem; max-width:340px; margin:0 auto}
+  .guess-row input{flex:1; font-family:"Cormorant Garamond",serif; font-size:1.05rem; color:var(--ink);
+    background:#FFFDF6; border:1px solid rgba(110,20,35,.28); border-radius:9px; padding:.5rem .7rem}
+  .guess-row input:focus{outline:none; border-color:var(--gold); box-shadow:0 0 0 3px rgba(194,160,74,.45)}
+  .guess-row button{border:none; border-radius:999px; padding:.5rem 1.1rem; font-family:"Cormorant Garamond",serif; font-size:1.02rem;
+    background:linear-gradient(180deg,#8A1B2D,var(--bordeaux-deep)); color:var(--gold-soft); cursor:pointer}
+  .guess-skip{display:inline-block; margin-top:.6rem; background:none; border:none; cursor:pointer;
+    font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.16em; text-transform:uppercase; color:var(--bordeaux); opacity:.6}
+  .guess-skip:hover{opacity:.9}
+  .guess-result{min-height:1.2em; margin:.7rem 0 0; font-family:"Cormorant Garamond",serif; font-style:italic; font-size:1.25rem}
+  .guess-result.ok{color:#1f7a4d}
+  .guess-result.no{color:var(--bordeaux)}
+
   .petal{position:fixed; top:-32px; z-index:1; pointer-events:none; opacity:0;
     animation:fall linear forwards}
   @keyframes fall{
@@ -116,6 +134,9 @@
   .body p.typing::after{content:"▌"; color:var(--bordeaux); margin-left:1px;
     animation:caret .8s steps(1) infinite}
   @keyframes caret{50%{opacity:0}}
+
+  .star{position:fixed; border-radius:50%; background:#FFF; z-index:0; pointer-events:none; animation:twinkle linear infinite}
+  @keyframes twinkle{0%,100%{opacity:.12}50%{opacity:.9}}
 
   .mote{position:absolute; width:5px; height:5px; border-radius:50%; background:rgba(226,204,142,.6); z-index:2; pointer-events:none;
     animation:rise 9s linear infinite; opacity:0}
@@ -156,6 +177,15 @@
       <p class="date" id="ov-date"></p>
       <p class="to-name" id="ov-toname">—</p>
       <div class="body" id="ov-body"></div>
+      <div class="guess" id="ov-guess" hidden>
+        <p class="guess-q">Quem será que escreveu isto?</p>
+        <div class="guess-row" id="guess-row">
+          <input id="guess-input" placeholder="Seu palpite…" autocomplete="off">
+          <button id="guess-btn" type="button">Adivinhar</button>
+        </div>
+        <button id="guess-skip" type="button" class="guess-skip">revelar sem adivinhar</button>
+        <p class="guess-result" id="guess-result"></p>
+      </div>
       <p class="sign" id="ov-sign">Com carinho,</p>
       <p class="seal-note" id="ov-note">—</p>
     </article>
@@ -192,26 +222,62 @@
 
   // mensagem mostrada quando a carta não existe mais (removida) ou o link é inválido
   var MSG_PERDIDA =
-    "\uD83D\uDC8C Sua carta se perdeu no mar.<br>"+
+    "Sua carta se perdeu no mar.<br>"+
     "As ondas levaram palavras que foram escritas com carinho, e a maré acabou escondendo um pedaço da mensagem que deveria chegar até você. Nem todas as cartas encontram seu destino, mas isso não significa que os sentimentos dentro delas deixem de existir.<br><br>"+
-    "\uD83C\uDF0A Às vezes, a vida leva embora aquilo que esperávamos receber. Mas ela também nos ensina que novos caminhos sempre surgem para quem continua seguindo em frente.<br><br>"+
-    "\u2728 O que é verdadeiro pode até se perder pelo caminho, mas nunca deixa de existir no coração de quem acredita.<br>";
+    "Às vezes, a vida leva embora aquilo que esperávamos receber. Mas ela também nos ensina que novos caminhos sempre surgem para quem continua seguindo em frente.<br><br>"+
+    "O que é verdadeiro pode até se perder pelo caminho, mas nunca deixa de existir no coração de quem acredita.<br>";
 
   function escapeHtml(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
 
-  var letterText="";
+  var letterText="", senderName="";
   function reveal(row){
     $("ov-name").textContent     = row.recipient_name;
     $("ov-toname").textContent   = row.recipient_name;
     $("ov-note").textContent     = "Para "+row.recipient_name+" · "+row.recipient_turma;
     $("ov-date").textContent     = new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
-    var sign=$("ov-sign");
-    if(row.sender_name){ sign.className="sign"; sign.innerHTML="Com carinho,<br>"+escapeHtml(row.sender_name); }
-    else { sign.className="sign anon"; sign.textContent="Admirador secreto"; }
+    senderName = row.sender_name ? String(row.sender_name) : "";
+
+    var sign=$("ov-sign"), guess=$("ov-guess");
+    if(senderName){
+      // tem remetente → jogo de adivinhação, assinatura escondida até revelar
+      sign.style.display="none";
+      guess.hidden=false;
+      $("guess-row").style.display="";
+      $("guess-skip").style.display="";
+      $("guess-input").value="";
+      $("guess-result").textContent=""; $("guess-result").className="guess-result";
+    } else {
+      // anônima → continua mistério
+      guess.hidden=true;
+      sign.style.display=""; sign.className="sign anon"; sign.textContent="Admirador secreto";
+    }
+
     letterText = String(row.message||"");
     $("ov-body").innerHTML="";
     statusEl.hidden=true; stage.hidden=false;
   }
+
+  // ----- jogo "Quem será?" -----
+  function norm(s){ return String(s).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim(); }
+  function revelarAssinatura(){
+    $("guess-row").style.display="none";
+    $("guess-skip").style.display="none";
+    var sign=$("ov-sign");
+    sign.style.display=""; sign.className="sign";
+    sign.innerHTML="Com carinho,<br>"+escapeHtml(senderName);
+  }
+  function adivinhar(){
+    var g=norm($("guess-input").value); if(!g) return;
+    var sn=norm(senderName), words=sn.split(" ");
+    var acertou = g===sn || words.indexOf(g)>=0 || sn.indexOf(g)>=0 || g.split(" ")[0]===words[0];
+    var res=$("guess-result");
+    res.textContent = acertou ? ("Acertou! Era "+senderName+".") : ("Quase! Na verdade foi "+senderName+".");
+    res.className = "guess-result "+(acertou?"ok":"no");
+    revelarAssinatura();
+  }
+  $("guess-btn").onclick=adivinhar;
+  $("guess-skip").onclick=function(){ $("guess-result").textContent=""; revelarAssinatura(); };
+  $("guess-input").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); adivinhar(); } });
 
   /* ---------------- ÁUDIO (sintetizado, sem arquivos) ---------------- */
   var AC=null, master=null, musicOn=true, loopTimer=null;
@@ -297,7 +363,7 @@
     if(/^[A-Za-z0-9_-]{11}$/.test(s)) return s;
     return "";
   }
-  var ytId=parseYT(YOUTUBE), useYT=!!ytId, ytPlayer=null, ytReady=false, ytPending=false;
+  var ytId=parseYT(YOUTUBE), useYT=!!ytId, ytPlayer=null, ytReady=false, ytPending=false, ytFade=null;
   function loadYT(){
     if(!useYT) return;
     var tag=document.createElement("script"); tag.src="https://www.youtube.com/iframe_api";
@@ -312,7 +378,15 @@
   };
   function ytPlay(){
     if(!ytPlayer){ ytPending=true; return; }
-    try{ ytPlayer.unMute(); ytPlayer.setVolume(70); ytPlayer.playVideo(); }catch(e){}
+    try{
+      ytPlayer.unMute(); ytPlayer.setVolume(0); ytPlayer.playVideo();
+      var v=0; clearInterval(ytFade);
+      ytFade=setInterval(function(){
+        if(!musicOn){ clearInterval(ytFade); return; }
+        v=Math.min(70, v+5); try{ ytPlayer.setVolume(v); }catch(e){}
+        if(v>=70) clearInterval(ytFade);
+      }, 90);
+    }catch(e){}
   }
   loadYT();
 
@@ -390,6 +464,7 @@
   function breakSeal(){
     if(scene.classList.contains("is-open")) return;
     var reduce=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if(navigator.vibrate){ try{ navigator.vibrate([40,30,70]); }catch(e){} }
     initAudio();
     crackSound();
     if(useYT){ if(ytReady) ytPlay(); else ytPending=true; }
@@ -407,6 +482,22 @@
     openTimer=setTimeout(onOpen, 1150);
   }
   $("open-btn").onclick=breakSeal;
+
+  // estrelas piscando no fundo (céu noturno)
+  function spawnStars(){
+    for(var i=0;i<46;i++){
+      var s=document.createElement("span"); s.className="star";
+      var size=(1+Math.random()*1.8).toFixed(1);
+      s.style.width=size+"px"; s.style.height=size+"px";
+      s.style.left=(Math.random()*100)+"vw";
+      s.style.top=(Math.random()*100)+"vh";
+      s.style.animationDuration=(2+Math.random()*4)+"s";
+      s.style.animationDelay=(Math.random()*4)+"s";
+      if(Math.random()<0.3) s.style.background="#E3CC8E";
+      document.body.appendChild(s);
+    }
+  }
+  spawnStars();
 
   var motes=[];
   function spawnMotes(){
