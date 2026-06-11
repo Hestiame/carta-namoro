@@ -111,6 +111,9 @@
   .btn.danger:hover{background:#8A1B2D; color:#FBE9D0}
   .btn.wa{background:transparent; color:#1f7a4d; box-shadow:inset 0 0 0 1px rgba(37,211,102,.55)}
   .btn.wa:hover{background:#1f7a4d; color:#EAFBF1}
+  .btn.ok{background:#1f7a4d; color:#EAFBF1; box-shadow:0 4px 12px rgba(31,122,77,.25)}
+  .btn.ok:hover{filter:brightness(1.08)}
+  .roster-item.done{border-color:rgba(31,122,77,.4); background:rgba(232,251,241,.55)}
 
   .list-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.8rem}
   .stats{display:flex; gap:.6rem; margin-bottom:.9rem}
@@ -371,10 +374,11 @@
       <div>
         <div class="list-head">
           <h2 class="display-h" style="font-size:1.5rem">Cartas cadastradas</h2>
-          <span class="eyebrow" id="roster-count"></span>
+          <button class="btn ghost mini" id="btn-export">Exportar planilha</button>
         </div>
         <div class="stats" id="stats" hidden>
           <div class="stat"><b id="st-total">0</b><span>cartas</span></div>
+          <div class="stat"><b id="st-entregues">0</b><span>entregues</span></div>
           <div class="stat"><b id="st-abertas">0</b><span>abertas</span></div>
           <div class="stat"><b id="st-aberturas">0</b><span>aberturas</span></div>
         </div>
@@ -496,9 +500,10 @@
     var st=$("stats");
     if(!letters.length){ st.hidden=true; return; }
     st.hidden=false;
-    var abertas=0, aberturas=0;
-    letters.forEach(function(l){ if(l.opens>0) abertas++; aberturas+=(l.opens||0); });
+    var abertas=0, aberturas=0, entregues=0;
+    letters.forEach(function(l){ if(l.opens>0) abertas++; aberturas+=(l.opens||0); if(l.delivered) entregues++; });
     $("st-total").textContent=letters.length;
+    $("st-entregues").textContent=entregues;
     $("st-abertas").textContent=abertas;
     $("st-aberturas").textContent=aberturas;
   }
@@ -526,9 +531,12 @@
     if(!list.length){ rosterEl.innerHTML='<div class="empty">Nada encontrado para “'+escapeHtml(term)+'”.</div>'; return; }
     rosterEl.innerHTML="";
     list.forEach(function(l){
-      var row=document.createElement("div"); row.className="roster-item";
+      var row=document.createElement("div"); row.className="roster-item"+(l.delivered?" done":"");
       var waBtn = l.phone ? '<button class="btn wa mini act-wa">WhatsApp</button>' : '';
+      var delBtn = l.delivered ? '<button class="btn ok mini act-deliver">Entregue \u2713</button>'
+                               : '<button class="btn ghost mini act-deliver">Entregar</button>';
       row.innerHTML='<div class="who"><div class="name"></div><div class="meta"></div><div class="opened"></div></div>'+
+        delBtn+
         '<button class="btn ghost mini act-prev">Pré-visualizar</button>'+
         waBtn+
         '<button class="btn danger mini act-del">Remover</button>';
@@ -536,12 +544,43 @@
       row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code+(l.phone?"  ·  \uD83D\uDCF1":"");
       var op=row.querySelector(".opened"); op.textContent=fmtOpened(l);
       if(l.opens>0) op.classList.add("on");
+      row.querySelector(".act-deliver").onclick=function(){ toggleDelivered(l); };
       row.querySelector(".act-prev").onclick=function(){openLetter(l);};
       row.querySelector(".act-del").onclick=function(){removeCarta(l);};
       var wa=row.querySelector(".act-wa"); if(wa) wa.onclick=function(){ enviarWhatsApp(l); };
       rosterEl.appendChild(row);
     });
   }
+
+  // ---- marcar/desmarcar como entregue ----
+  async function toggleDelivered(l){
+    if(!sb) return;
+    var nv=!l.delivered;
+    var res=await sb.from("cartas").update({delivered:nv}).eq("code", l.code);
+    if(res.error){ alert("Não foi possível atualizar: "+res.error.message); return; }
+    l.delivered=nv; renderRoster();
+  }
+
+  // ---- exportar planilha (CSV, abre no Excel/Sheets) ----
+  function exportCSV(){
+    if(!letters.length){ alert("Não há cartas para exportar."); return; }
+    var head=["Nome","Turma","Código","Remetente","WhatsApp","Aberturas","Última abertura","Entregue","Link"];
+    var esc=function(v){ v=(v==null?"":String(v)); return '"'+v.replace(/"/g,'""')+'"'; };
+    var linhas=[head.map(esc).join(";")];
+    letters.forEach(function(l){
+      linhas.push([
+        l.name, l.turma, l.code, (l.sender||""), (l.phone||""), (l.opens||0),
+        (l.lastOpened? new Date(l.lastOpened).toLocaleString("pt-BR"):""),
+        (l.delivered?"Sim":"Não"),
+        SITE_URL+"carta.html?t="+l.token
+      ].map(esc).join(";"));
+    });
+    var blob=new Blob(["\uFEFF"+linhas.join("\r\n")], {type:"text/csv;charset=utf-8;"});
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob); a.download="cartas-seladas.csv";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $("btn-export").onclick=exportCSV;
   $("search").addEventListener("input", renderRoster);
 
   // ---- abrir o WhatsApp da pessoa com a carta já pronta ----
@@ -550,13 +589,12 @@
     if(!num){ alert("Esta carta não tem número de WhatsApp."); return; }
     if(num.length<=11) num="55"+num;        // sem código do país → assume Brasil (55)
     var link=SITE_URL+"carta.html?t="+encodeURIComponent(l.token);
-    var EMO_CARTA="\uD83D\uDC8C", EMO_BRILHO="\u2728", EMO_CORACAO="\u2764\uFE0F";
     var msg=
-      "Oi, "+l.name+"! "+EMO_CARTA+"\n\n"+
+      "Oi, "+l.name+"!\n\n"+
       "Você recebeu uma carta selada.\n"+
       "Talvez você já tenha ouvido algumas dessas palavras antes, mas desta vez elas chegaram de uma forma especial, guardadas com carinho para serem lidas no momento certo.\n\n"+
-      EMO_BRILHO+" Seu acesso chegou.\n"+
-      "Abra quando quiser e descubra o que foi escrito especialmente para você. "+EMO_CORACAO+"\n\n"+
+      "Seu acesso chegou.\n"+
+      "Abra quando quiser e descubra o que foi escrito especialmente para você.\n\n"+
       link;
     window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg), "_blank");
   }
@@ -667,7 +705,7 @@
       var c=code();
       var res=await sb.from("cartas").insert({
         code:c, recipient_name:name, recipient_turma:turma, message:msg, sender_name:(sender||null), recipient_phone:(wa||null)
-      }).select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone").single();
+      }).select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, open_count, last_opened_at, delivered").single();
       if(res.error){
         lastErr=res.error;
         if(res.error.code==="23505") continue;   // código repetido → tenta outro
@@ -693,13 +731,13 @@
 
   // ---- mapeia uma linha do banco para o formato usado na tela ----
   function mapRow(r){
-    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name, phone:r.recipient_phone, opens:(r.open_count||0), lastOpened:r.last_opened_at };
+    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name, phone:r.recipient_phone, opens:(r.open_count||0), lastOpened:r.last_opened_at, delivered:!!r.delivered };
   }
 
   // ---- carrega as cartas do banco ----
   async function loadCartas(){
     var res=await sb.from("cartas")
-      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, open_count, last_opened_at, created_at")
+      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, open_count, last_opened_at, delivered, created_at")
       .order("created_at",{ascending:false});
     if(res.error){
       rosterEl.innerHTML='<div class="empty">Erro ao carregar: '+res.error.message+'</div>';
