@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartas Seladas — Administração & Carta Digital</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;0,6..96,600;1,6..96,500&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500;700&family=Pinyon+Script&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --ink:#1B1410;
+    --bordeaux:#6E1423;
+    --bordeaux-deep:#46101A;
+    --gold:#C2A04A;
+    --gold-soft:#E3CC8E;
+    --parchment:#F2E6C9;
+    --parchment-light:#FBF4E2;
+    --paper-white:#FCF7EC;
+    --rose:#C97E7E;
+    --night:#170A0F;
+    --night-2:#2C111A;
+    --ring: 0 0 0 3px rgba(194,160,74,.55);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:"Cormorant Garamond",Georgia,serif;
+    color:var(--ink);
+    background:
+      radial-gradient(120% 90% at 50% -10%, #FFFBF0 0%, var(--parchment-light) 55%, #EFE2C2 100%);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    /* subtle paper grain */
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  button{font-family:inherit;cursor:pointer}
+  :focus-visible{outline:none;box-shadow:var(--ring);border-radius:6px}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    position:relative; z-index:2;
+    display:flex; align-items:center; gap:1.4rem; flex-wrap:wrap;
+    padding:1.1rem clamp(1rem,4vw,2.4rem);
+    border-bottom:1px solid rgba(110,20,35,.18);
+    background:linear-gradient(180deg, rgba(252,247,236,.9), rgba(252,247,236,.4));
+    backdrop-filter:blur(4px);
+  }
+  .brand{display:flex; align-items:center; gap:.7rem; margin-right:auto}
+  .brand .mark{
+    width:38px;height:38px;border-radius:50%;
+    display:grid;place-items:center;color:var(--gold-soft);
+    background:radial-gradient(circle at 35% 30%, #8A1B2D, var(--bordeaux-deep));
+    box-shadow:inset 0 0 0 2px rgba(226,204,142,.5), 0 4px 10px rgba(70,16,26,.35);
+    font-size:1.1rem;
+  }
+  .brand h1{
+    font-family:"Bodoni Moda",serif; font-weight:600;
+    font-size:1.18rem; letter-spacing:.02em; margin:0; color:var(--bordeaux-deep);
+  }
+  .brand small{display:block; font-size:.62rem; letter-spacing:.32em; text-transform:uppercase; color:var(--bordeaux); opacity:.7; font-family:"JetBrains Mono",monospace}
+  .tabs{display:flex; gap:.4rem}
+  .tab{
+    border:1px solid rgba(110,20,35,.25); background:transparent; color:var(--bordeaux-deep);
+    padding:.5rem 1.1rem; border-radius:999px; font-size:1.02rem; letter-spacing:.01em;
+    transition:.18s;
+  }
+  .tab[aria-selected="true"]{ background:var(--bordeaux); color:var(--gold-soft); border-color:var(--bordeaux) }
+  .tab:hover{ border-color:var(--bordeaux) }
+
+  main{position:relative; z-index:1; max-width:1100px; margin:0 auto; padding:clamp(1.2rem,4vw,2.6rem) clamp(1rem,4vw,2rem) 4rem}
+  .view[hidden]{display:none}
+
+  .eyebrow{font-family:"JetBrains Mono",monospace; font-size:.66rem; letter-spacing:.34em; text-transform:uppercase; color:var(--bordeaux); opacity:.85}
+  .display-h{font-family:"Bodoni Moda",serif; color:var(--bordeaux-deep); font-weight:600; line-height:1.05; margin:.3rem 0 0}
+
+  /* ---------- Cadastro ---------- */
+  .grid-2{display:grid; grid-template-columns:minmax(0,360px) 1fr; gap:clamp(1.2rem,4vw,2.4rem); align-items:start}
+  @media (max-width:780px){ .grid-2{grid-template-columns:1fr} }
+
+  .card-panel{
+    background:linear-gradient(180deg,var(--paper-white),#F6ECD3);
+    border:1px solid rgba(194,160,74,.5);
+    border-radius:14px; padding:1.4rem;
+    box-shadow:0 10px 30px rgba(70,16,26,.08), inset 0 0 0 1px rgba(255,255,255,.4);
+  }
+  .card-panel h2{font-family:"Bodoni Moda",serif; color:var(--bordeaux-deep); margin:.1rem 0 1rem; font-size:1.3rem; font-weight:500}
+  label{display:block; margin:0 0 .9rem}
+  label .lab{display:block; font-family:"JetBrains Mono",monospace; font-size:.62rem; letter-spacing:.18em; text-transform:uppercase; color:var(--bordeaux); margin-bottom:.32rem}
+  input,textarea{
+    width:100%; font-family:"Cormorant Garamond",serif; font-size:1.08rem; color:var(--ink);
+    background:#FFFDF6; border:1px solid rgba(110,20,35,.28); border-radius:9px; padding:.6rem .7rem;
+  }
+  textarea{min-height:120px; resize:vertical; line-height:1.5}
+  input:focus,textarea:focus{outline:none; border-color:var(--gold); box-shadow:var(--ring)}
+  .btn{
+    border:none; border-radius:999px; padding:.7rem 1.3rem; font-size:1.02rem; letter-spacing:.01em;
+    background:linear-gradient(180deg,#8A1B2D,var(--bordeaux-deep)); color:var(--gold-soft);
+    box-shadow:0 6px 16px rgba(70,16,26,.3), inset 0 0 0 1px rgba(226,204,142,.35);
+    transition:.16s; display:inline-flex; align-items:center; gap:.5rem;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn.ghost{background:transparent; color:var(--bordeaux-deep); box-shadow:inset 0 0 0 1px rgba(110,20,35,.4)}
+  .btn.gold{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:var(--bordeaux-deep); box-shadow:0 6px 16px rgba(194,160,74,.3)}
+  .btn.danger{background:transparent; color:#8A1B2D; box-shadow:inset 0 0 0 1px rgba(138,27,45,.45)}
+  .btn.danger:hover{background:#8A1B2D; color:#FBE9D0}
+  .btn.wa{background:transparent; color:#1f7a4d; box-shadow:inset 0 0 0 1px rgba(37,211,102,.55)}
+  .btn.wa:hover{background:#1f7a4d; color:#EAFBF1}
+  .btn.ok{background:#1f7a4d; color:#EAFBF1; box-shadow:0 4px 12px rgba(31,122,77,.25)}
+  .btn.ok:hover{filter:brightness(1.08)}
+  .roster-item.done{border-color:rgba(31,122,77,.4); background:rgba(232,251,241,.55)}
+
+  .list-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:.8rem}
+  .stats{display:flex; gap:.6rem; margin-bottom:.9rem}
+  .stat{flex:1; text-align:center; padding:.6rem .3rem; border-radius:11px;
+    background:rgba(255,253,246,.7); border:1px solid rgba(194,160,74,.4)}
+  .stat b{display:block; font-family:"Bodoni Moda",serif; font-size:1.5rem; color:var(--bordeaux-deep); line-height:1}
+  .stat span{font-family:"JetBrains Mono",monospace; font-size:.56rem; letter-spacing:.16em; text-transform:uppercase; color:var(--bordeaux); opacity:.8}
+  .search{width:100%; margin-bottom:.9rem; font-family:"Cormorant Garamond",serif; font-size:1.05rem; color:var(--ink);
+    background:#FFFDF6; border:1px solid rgba(110,20,35,.22); border-radius:9px; padding:.55rem .7rem}
+  .search:focus{outline:none; border-color:var(--gold); box-shadow:var(--ring)}
+  .roster{display:flex; flex-direction:column; gap:.6rem}
+  .roster-item{
+    display:flex; align-items:center; gap:.8rem; padding:.7rem .9rem; border-radius:11px;
+    background:rgba(255,253,246,.7); border:1px solid rgba(110,20,35,.14);
+  }
+  .roster-item .who{flex:1; min-width:0}
+  .roster-item .name{font-size:1.16rem; color:var(--bordeaux-deep); line-height:1.1}
+  .roster-item .meta{font-family:"JetBrains Mono",monospace; font-size:.66rem; letter-spacing:.06em; color:var(--bordeaux); opacity:.85; margin-top:.15rem}
+  .roster-item .opened{font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.04em; margin-top:.2rem; color:#9a8a55}
+  .roster-item .opened.on{color:#1f7a4d}
+  .mini{font-size:.86rem; padding:.42rem .8rem}
+  .empty{padding:1.4rem; text-align:center; color:var(--bordeaux); opacity:.7; font-style:italic}
+
+  /* ---------- Impressão / Vouchers ---------- */
+  .impressao-bar{
+    display:flex; align-items:center; gap:1rem; flex-wrap:wrap;
+    margin:.2rem 0 1.6rem; padding:1rem 1.2rem; border-radius:13px;
+    background:linear-gradient(180deg,var(--paper-white),#F4EAD0); border:1px solid rgba(194,160,74,.5);
+  }
+  .impressao-bar .count{font-family:"JetBrains Mono",monospace; font-size:.72rem; letter-spacing:.1em; color:var(--bordeaux); margin-right:auto}
+  .hint{font-size:.98rem; color:var(--bordeaux-deep); opacity:.75; font-style:italic; flex-basis:100%}
+
+  .cards{display:grid; grid-template-columns:repeat(auto-fill,minmax(248px,1fr)); gap:1.4rem}
+
+  .voucher{
+    position:relative; background:
+      linear-gradient(180deg,var(--paper-white),var(--parchment));
+    border-radius:14px; padding:1.1rem 1.1rem 0;
+    box-shadow:0 12px 30px rgba(70,16,26,.14);
+    outline:1px solid rgba(194,160,74,.65); outline-offset:-7px;
+    overflow:hidden; cursor:pointer; transition:.18s;
+  }
+  .voucher:hover{transform:translateY(-3px); box-shadow:0 18px 40px rgba(70,16,26,.2)}
+  .voucher::before{ /* gold inner frame */
+    content:""; position:absolute; inset:4px; border:1px solid rgba(194,160,74,.45); border-radius:10px; pointer-events:none;
+  }
+  .voucher .watermark{
+    position:absolute; right:-14px; bottom:34px; font-size:8rem; line-height:1; color:rgba(110,20,35,.05); pointer-events:none; font-family:"Bodoni Moda",serif;
+  }
+  .v-eyebrow{font-family:"JetBrains Mono",monospace; font-size:.56rem; letter-spacing:.3em; text-transform:uppercase; color:var(--bordeaux); text-align:center; opacity:.8}
+  .v-eyebrow::before,.v-eyebrow::after{content:"·"; margin:0 .5em; color:var(--gold)}
+  .v-name{font-family:"Cormorant Garamond",serif; font-size:1.5rem; text-align:center; color:var(--bordeaux-deep); line-height:1.05; margin:.25rem 0 .2rem}
+  .v-turma{display:block; text-align:center; font-family:"JetBrains Mono",monospace; font-size:.62rem; letter-spacing:.15em; text-transform:uppercase; color:var(--bordeaux); opacity:.85; margin-bottom:.7rem}
+
+  .qr-frame{
+    position:relative; width:max-content; margin:0 auto; padding:12px; border-radius:10px;
+    background:var(--paper-white); box-shadow:inset 0 0 0 1px rgba(110,20,35,.1);
+  }
+  .qr-frame canvas, .qr-frame img{display:block; width:160px; height:160px}
+  /* envelope corner ticks around the QR */
+  .qr-frame::before,.qr-frame::after{content:""; position:absolute; width:14px; height:14px; border:2px solid var(--gold)}
+  .qr-frame::before{top:2px; left:2px; border-right:0; border-bottom:0}
+  .qr-frame::after{bottom:2px; right:2px; border-left:0; border-top:0}
+
+  .v-stub{
+    margin:.9rem -1.1rem 0; padding:.7rem 1.1rem .95rem; position:relative;
+    border-top:2px dashed rgba(110,20,35,.32);
+    text-align:center;
+  }
+  .v-stub::before,.v-stub::after{content:""; position:absolute; top:-9px; width:16px; height:16px; border-radius:50%; background:var(--parchment-light); box-shadow:inset 0 0 0 1px rgba(110,20,35,.18)}
+  .v-stub::before{left:-8px} .v-stub::after{right:-8px}
+  .v-code{font-family:"JetBrains Mono",monospace; font-size:1rem; font-weight:700; letter-spacing:.12em; color:var(--bordeaux-deep)}
+  .v-action{font-size:.92rem; font-style:italic; color:var(--bordeaux); opacity:.8; margin-top:.1rem}
+
+  /* crop guides only appear in print */
+  .crop{display:none}
+
+  /* ---------- Login ---------- */
+  .auth{position:fixed; inset:0; z-index:80; display:grid; place-items:center; padding:1.2rem;
+    background:radial-gradient(120% 100% at 50% -10%, #FFFBF0, #EFE2C2)}
+  .auth[hidden]{display:none}
+  .auth-card{width:min(360px,94vw); text-align:center;
+    background:linear-gradient(180deg,var(--paper-white),#F6ECD3);
+    border:1px solid rgba(194,160,74,.5); border-radius:16px; padding:2rem 1.6rem;
+    box-shadow:0 18px 50px rgba(70,16,26,.16)}
+  .auth-card .mark{display:inline-grid; place-items:center; width:48px; height:48px; border-radius:50%; margin-bottom:.6rem;
+    color:var(--gold-soft); font-size:1.4rem;
+    background:radial-gradient(circle at 35% 30%, #8A1B2D, var(--bordeaux-deep));
+    box-shadow:inset 0 0 0 2px rgba(226,204,142,.5)}
+  .auth-card h2{font-family:"Bodoni Moda",serif; color:var(--bordeaux-deep); margin:.1rem 0; font-weight:600; font-size:1.5rem}
+  .auth-sub{color:var(--bordeaux); opacity:.8; font-style:italic; margin:.1rem 0 1.3rem}
+  .auth-card label{text-align:left}
+  .auth-card .btn{width:100%; justify-content:center; margin-top:.3rem}
+  .auth-msg{min-height:1.2em; margin:.8rem 0 0; font-size:.96rem; color:var(--bordeaux-deep)}
+  .auth-msg.warn{color:#8A1B2D}
+
+  /* ---------- Carta digital (overlay) ---------- */
+  .overlay{
+    position:fixed; inset:0; z-index:50; display:grid; place-items:center;
+    padding:1.2rem;
+    background:
+      radial-gradient(60% 50% at 50% 36%, rgba(168,60,40,.30), transparent 70%),
+      radial-gradient(120% 100% at 50% 120%, var(--night-2), var(--night) 70%);
+    opacity:0; transition:opacity .5s ease;
+  }
+  .overlay.show{opacity:1}
+  .overlay[hidden]{display:none}
+  .candle{position:absolute; top:30%; left:50%; width:340px; height:340px; transform:translate(-50%,-50%); border-radius:50%;
+    background:radial-gradient(circle, rgba(255,210,150,.22), transparent 65%); filter:blur(8px); pointer-events:none;
+    animation:flicker 4.5s ease-in-out infinite}
+  @keyframes flicker{0%,100%{opacity:.85;transform:translate(-50%,-50%) scale(1)}50%{opacity:1;transform:translate(-50%,-50%) scale(1.05)}}
+
+  .close-x{position:absolute; top:1rem; right:1.1rem; z-index:6; width:40px;height:40px;border-radius:50%;
+    background:rgba(252,247,236,.12); color:var(--gold-soft); border:1px solid rgba(226,204,142,.4); font-size:1.3rem; line-height:1}
+
+  .stage{position:relative; width:min(420px,92vw); z-index:2; text-align:center}
+
+  /* envelope */
+  .envelope{position:relative; width:100%; aspect-ratio:7/5; margin:0 auto;}
+  .env-body{position:absolute; inset:0; border-radius:10px;
+    background:linear-gradient(180deg,#F2E4C4,#E6D3A8);
+    box-shadow:0 24px 60px rgba(0,0,0,.5), inset 0 0 0 1px rgba(194,160,74,.6);}
+  .env-body::after{content:""; position:absolute; inset:10px; border:1px solid rgba(110,20,35,.18); border-radius:6px}
+  .env-flap{position:absolute; left:0; top:0; width:100%; height:62%;
+    background:linear-gradient(180deg,#EBDAB4,#DFC998);
+    clip-path:polygon(0 0,100% 0,50% 100%);
+    transform-origin:top; transition:transform 1s cubic-bezier(.5,0,.2,1);
+    box-shadow:0 2px 4px rgba(70,16,26,.15); z-index:4; backface-visibility:hidden;}
+  .wax{position:absolute; left:50%; top:54%; width:74px; height:74px; transform:translate(-50%,-50%); z-index:5;}
+  .wax .half{position:absolute; top:0; width:50%; height:100%; overflow:hidden;
+    transition:transform .7s cubic-bezier(.4,0,.2,1), opacity .7s;}
+  .wax .l{left:0} .wax .r{right:0}
+  .wax .half::before{content:""; position:absolute; top:0; width:74px; height:74px;
+    border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, #9A2233, var(--bordeaux-deep) 70%);
+    box-shadow:inset 0 0 0 3px rgba(226,204,142,.45), 0 3px 8px rgba(0,0,0,.4);}
+  .wax .l::before{left:0} .wax .r::before{right:0}
+  .wax .emblem{position:absolute; inset:0; display:grid; place-items:center; color:var(--gold-soft); font-size:1.7rem; z-index:1; transition:opacity .4s}
+  .env-caption{margin-top:1.4rem; color:var(--gold-soft)}
+  .env-caption .to{font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.3em; text-transform:uppercase; opacity:.7}
+  .env-caption .name{font-family:"Cormorant Garamond",serif; font-size:1.7rem; color:#F6E9CB; margin:.15rem 0 1rem}
+  .open-btn{background:linear-gradient(180deg,var(--gold-soft),var(--gold)); color:var(--bordeaux-deep); border:none; border-radius:999px; padding:.65rem 1.5rem; font-size:1.05rem; letter-spacing:.02em; box-shadow:0 8px 20px rgba(0,0,0,.35)}
+
+  /* the letter sheet */
+  .letter{
+    position:fixed; left:50%; top:50%; z-index:5;
+    width:min(560px,94vw); max-height:88vh; overflow:auto;
+    padding:clamp(1.6rem,5vw,2.6rem);
+    background:linear-gradient(180deg,var(--paper-white),#F4E8CC);
+    border-radius:6px; box-shadow:0 30px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(194,160,74,.5);
+    opacity:0; pointer-events:none;
+    transform:translate(-50%,-50%) translateY(28px) scale(.96);
+    transition:opacity .7s ease .35s, transform .9s cubic-bezier(.2,.7,.2,1) .35s;
+  }
+  .letter::before{content:""; position:absolute; inset:9px; border:1px solid rgba(194,160,74,.4); border-radius:4px; pointer-events:none}
+  .flourish{text-align:center; color:var(--gold); font-size:1.2rem; letter-spacing:.5em; margin-bottom:.3rem}
+  .letter .date{text-align:center; font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.26em; text-transform:uppercase; color:var(--bordeaux); opacity:.7}
+  .letter .to-name{font-family:"Cormorant Garamond",serif; font-style:italic; font-size:1.9rem; color:var(--bordeaux-deep); text-align:center; margin:.5rem 0 1.2rem}
+  .letter .body p{font-size:1.22rem; line-height:1.62; color:#2A1B16; margin:0 0 1rem}
+  .letter .sign{font-family:"Pinyon Script",cursive; font-size:2.1rem; color:var(--bordeaux); text-align:right; margin-top:.6rem; line-height:1}
+  .letter .seal-note{margin-top:1.6rem; padding-top:1rem; border-top:1px dashed rgba(110,20,35,.25); text-align:center;
+    font-family:"JetBrains Mono",monospace; font-size:.6rem; letter-spacing:.2em; text-transform:uppercase; color:var(--bordeaux); opacity:.7}
+
+  /* states */
+  .overlay .stage .envelope{transition:opacity .6s, transform .8s}
+  .overlay.is-opening .wax .l{transform:translateX(-26px) rotate(-38deg) translateY(20px); opacity:0}
+  .overlay.is-opening .wax .r{transform:translateX(26px) rotate(38deg) translateY(20px); opacity:0}
+  .overlay.is-opening .wax .emblem{opacity:0}
+  .overlay.is-opening .env-flap{transform:rotateX(178deg)}
+  .overlay.is-open .envelope{opacity:0; transform:translateY(-12px) scale(.9); pointer-events:none}
+  .overlay.is-open .env-caption{opacity:0; pointer-events:none; transition:opacity .4s}
+  .overlay.is-open .letter{opacity:1; transform:translate(-50%,-50%) translateY(0) scale(1); pointer-events:auto}
+
+  /* ambient motes */
+  .mote{position:absolute; width:5px;height:5px;border-radius:50%;background:rgba(226,204,142,.6); z-index:2; pointer-events:none;
+    animation:rise 9s linear infinite; opacity:0}
+  @keyframes rise{0%{transform:translateY(20px);opacity:0}15%{opacity:.7}100%{transform:translateY(-220px);opacity:0}}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important}
+    .letter,.env-flap,.wax .half{transition:opacity .3s !important}
+  }
+
+  /* ---------- PRINT ---------- */
+  @media print{
+    @page{margin:12mm}
+    body{background:#fff}
+    body::before,.topbar,#view-cadastro,.impressao-bar,.overlay,.candle{display:none !important}
+    main{max-width:none;margin:0;padding:0}
+    #view-impressao{display:block !important}
+    .cards{grid-template-columns:repeat(2,1fr); gap:0}
+    .voucher{
+      box-shadow:none !important; outline:none; cursor:default;
+      break-inside:avoid; page-break-inside:avoid;
+      margin:0; border-radius:0;
+      border:1px dashed #999;       /* cut line */
+      padding:14px 14px 0;
+    }
+    .voucher:hover{transform:none}
+    .voucher .v-action{display:none}
+    .crop{display:block; position:absolute; width:8px;height:8px;border-color:#333}
+    .crop.tl{top:-1px;left:-1px;border-top:1px solid;border-left:1px solid}
+    .crop.tr{top:-1px;right:-1px;border-top:1px solid;border-right:1px solid}
+    .crop.bl{bottom:-1px;left:-1px;border-bottom:1px solid;border-left:1px solid}
+    .crop.br{bottom:-1px;right:-1px;border-bottom:1px solid;border-right:1px solid}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">✶</span>
+    <div>
+      <h1>Cartas Seladas</h1>
+      <small>Área administrativa</small>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Seções">
+    <button class="tab" id="tab-cadastro" role="tab" aria-selected="true" aria-controls="view-cadastro">Cartas</button>
+    <button class="tab" id="tab-impressao" role="tab" aria-selected="false" aria-controls="view-impressao">Impressão</button>
+  </nav>
+  <button class="btn ghost mini" id="logout" hidden>Sair</button>
+</header>
+
+<main>
+  <!-- ============ CADASTRO ============ -->
+  <section class="view" id="view-cadastro" role="tabpanel" aria-labelledby="tab-cadastro">
+    <p class="eyebrow">Nova correspondência</p>
+    <h2 class="display-h" style="font-size:clamp(1.8rem,5vw,2.6rem); margin-bottom:1.4rem">Cadastrar uma carta</h2>
+    <div class="grid-2">
+      <form class="card-panel" id="form" autocomplete="off">
+        <h2>Detalhes do destinatário</h2>
+        <label>
+          <span class="lab">Nome do destinatário</span>
+          <input id="f-name" required placeholder="Ex.: Helena Andrade">
+        </label>
+        <label>
+          <span class="lab">Turma</span>
+          <input id="f-turma" required placeholder="Ex.: 3º Ano B">
+        </label>
+        <label>
+          <span class="lab">Mensagem da carta</span>
+          <textarea id="f-msg" required placeholder="Escreva a carta que será revelada ao escanear o QR Code…"></textarea>
+        </label>
+        <label>
+          <span class="lab">De quem é a carta? (opcional)</span>
+          <input id="f-sender" placeholder="Ex.: Lucas — ou deixe em branco para anônimo">
+        </label>
+        <label>
+          <span class="lab">WhatsApp da pessoa (opcional)</span>
+          <input id="f-wa" inputmode="numeric" placeholder="Ex.: 85 98765-4321 (só números)">
+        </label>
+        <button class="btn" type="submit">Gerar carta &amp; QR Code</button>
+        <p class="hint" id="last-code" hidden></p>
+      </form>
+
+      <div>
+        <div class="list-head">
+          <h2 class="display-h" style="font-size:1.5rem">Cartas cadastradas</h2>
+          <button class="btn ghost mini" id="btn-export">Exportar planilha</button>
+        </div>
+        <div class="stats" id="stats" hidden>
+          <div class="stat"><b id="st-total">0</b><span>cartas</span></div>
+          <div class="stat"><b id="st-entregues">0</b><span>entregues</span></div>
+          <div class="stat"><b id="st-abertas">0</b><span>abertas</span></div>
+          <div class="stat"><b id="st-aberturas">0</b><span>aberturas</span></div>
+        </div>
+        <input id="search" class="search" type="search" placeholder="Buscar por nome, turma ou código…">
+        <div class="roster" id="roster"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ IMPRESSÃO ============ -->
+  <section class="view" id="view-impressao" role="tabpanel" aria-labelledby="tab-impressao" hidden>
+    <p class="eyebrow">Envelopes físicos</p>
+    <h2 class="display-h" style="font-size:clamp(1.8rem,5vw,2.6rem); margin-bottom:1.2rem">Impressão</h2>
+    <div class="impressao-bar">
+      <span class="count" id="print-count"></span>
+      <button class="btn gold" id="btn-print">⎙ Imprimir todos os QR Codes</button>
+      <p class="hint">Na janela de impressão, escolha <strong>“Salvar como PDF”</strong> para gerar automaticamente o arquivo com todos os QR Codes. Cada cartão imprime com guia de corte tracejada. Toque em um cartão para pré-visualizar a carta (simula o escaneamento).</p>
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+</main>
+
+<!-- ============ LOGIN ============ -->
+<div class="auth" id="auth" hidden>
+  <form class="auth-card" id="login-form" autocomplete="on">
+    <span class="mark" aria-hidden="true">✶</span>
+    <h2>Cartas Seladas</h2>
+    <p class="auth-sub">Área administrativa</p>
+    <label>
+      <span class="lab">E-mail</span>
+      <input type="email" id="a-email" autocomplete="username" required>
+    </label>
+    <label>
+      <span class="lab">Senha</span>
+      <input type="password" id="a-pass" autocomplete="current-password" required>
+    </label>
+    <button class="btn" type="submit" id="login-btn">Entrar</button>
+    <p class="auth-msg" id="auth-msg" role="status"></p>
+  </form>
+</div>
+
+<!-- ============ CARTA DIGITAL ============ -->
+<div class="overlay" id="overlay" hidden>
+  <div class="candle" aria-hidden="true"></div>
+  <button class="close-x" id="close" aria-label="Fechar carta">×</button>
+  <div class="stage">
+    <div class="envelope" aria-hidden="true">
+      <div class="env-body"></div>
+      <div class="env-flap"></div>
+      <div class="wax">
+        <span class="half l"></span>
+        <span class="half r"></span>
+        <span class="emblem">♥</span>
+      </div>
+    </div>
+    <div class="env-caption">
+      <p class="to">Uma carta para</p>
+      <p class="name" id="ov-name">—</p>
+      <button class="open-btn" id="open-btn">Romper o selo</button>
+    </div>
+
+    <article class="letter" id="letter">
+      <div class="flourish">❧</div>
+      <p class="date" id="ov-date"></p>
+      <p class="to-name" id="ov-toname">—</p>
+      <div class="body" id="ov-body"></div>
+      <p class="sign" id="ov-sign">Com carinho,</p>
+      <p class="seal-note" id="ov-code">—</p>
+    </article>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* =========================================================
+     CONFIGURAÇÃO — preencha com os dados do seu projeto Supabase
+     (Dashboard → Project Settings → API)
+     ========================================================= */
+  var SUPABASE_URL      = "https://jtxmfxzlkwkljpuadnox.supabase.co";
+  var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0eG1meHpsa3drbGpwdWFkbm94Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDczNTIsImV4cCI6MjA5NjY4MzM1Mn0.VKr82fU7yv4USv2sf_AvLxfelv8lDy97C_4u3DuGh5I";
+  // Endereço da página do aluno detectado automaticamente (mesma pasta deste arquivo).
+  var SITE_URL          = location.origin + location.pathname.replace(/[^/]*$/, "");
+
+  var CONFIG_OK = SUPABASE_URL.indexOf("SEU-PROJETO") === -1
+               && SUPABASE_ANON_KEY.indexOf("SUA-CHAVE") === -1;
+
+  var sb = CONFIG_OK ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+  // estado em memória, espelho do banco
+  var letters = [];
+
+  // ---- elementos ----
+  var $ = function(id){return document.getElementById(id);};
+  var rosterEl=$("roster"), cardsEl=$("cards");
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  function code(){
+    var chars="ABCDEFGHJKLMNPQRSTUVWXYZ23456789", s;
+    do{ s="LV-"; for(var i=0;i<4;i++) s+=chars[Math.random()*chars.length|0]; }
+    while(letters.some(function(l){return l.code===s;}));
+    return s;
+  }
+
+  // ---- tabs ----
+  function switchTab(which){
+    var isCad = which==="cadastro";
+    $("tab-cadastro").setAttribute("aria-selected", isCad);
+    $("tab-impressao").setAttribute("aria-selected", !isCad);
+    $("view-cadastro").hidden = !isCad;
+    $("view-impressao").hidden = isCad;
+  }
+  $("tab-cadastro").onclick=function(){switchTab("cadastro");};
+  $("tab-impressao").onclick=function(){switchTab("impressao"); renderCards();};
+
+  // ---- estatísticas ----
+  function renderStats(){
+    var st=$("stats");
+    if(!letters.length){ st.hidden=true; return; }
+    st.hidden=false;
+    var abertas=0, aberturas=0, entregues=0;
+    letters.forEach(function(l){ if(l.opens>0) abertas++; aberturas+=(l.opens||0); if(l.delivered) entregues++; });
+    $("st-total").textContent=letters.length;
+    $("st-entregues").textContent=entregues;
+    $("st-abertas").textContent=abertas;
+    $("st-aberturas").textContent=aberturas;
+  }
+
+  function fmtOpened(l){
+    if(!l.opens){ return "não aberta"; }
+    var quando="";
+    if(l.lastOpened){
+      var d=new Date(l.lastOpened);
+      quando=" · última "+d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    }
+    return "aberta "+l.opens+"x"+quando;
+  }
+
+  // ---- roster (lista de cadastro) ----
+  function renderRoster(){
+    renderStats();
+    var term=($("search").value||"").trim().toLowerCase();
+    var list = term ? letters.filter(function(l){
+      return (l.name+" "+l.turma+" "+l.code).toLowerCase().indexOf(term)>=0;
+    }) : letters;
+
+    var rc=$("roster-count"); if(rc) rc.textContent = letters.length + " cadastrada(s)";
+    if(!letters.length){ rosterEl.innerHTML='<div class="empty">Nenhuma carta cadastrada ainda.</div>'; return; }
+    if(!list.length){ rosterEl.innerHTML='<div class="empty">Nada encontrado para “'+escapeHtml(term)+'”.</div>'; return; }
+    rosterEl.innerHTML="";
+    list.forEach(function(l){
+      var row=document.createElement("div"); row.className="roster-item"+(l.delivered?" done":"");
+      var waBtn = l.phone ? '<button class="btn wa mini act-wa">WhatsApp</button>' : '';
+      var delBtn = l.delivered ? '<button class="btn ok mini act-deliver">Entregue \u2713</button>'
+                               : '<button class="btn ghost mini act-deliver">Entregar</button>';
+      row.innerHTML='<div class="who"><div class="name"></div><div class="meta"></div><div class="opened"></div></div>'+
+        delBtn+
+        '<button class="btn ghost mini act-prev">Pré-visualizar</button>'+
+        waBtn+
+        '<button class="btn danger mini act-del">Remover</button>';
+      row.querySelector(".name").textContent=l.name;
+      row.querySelector(".meta").textContent=l.turma+"  ·  "+l.code+(l.phone?"  ·  \uD83D\uDCF1":"");
+      var op=row.querySelector(".opened"); op.textContent=fmtOpened(l);
+      if(l.opens>0) op.classList.add("on");
+      row.querySelector(".act-deliver").onclick=function(){ toggleDelivered(l); };
+      row.querySelector(".act-prev").onclick=function(){openLetter(l);};
+      row.querySelector(".act-del").onclick=function(){removeCarta(l);};
+      var wa=row.querySelector(".act-wa"); if(wa) wa.onclick=function(){ enviarWhatsApp(l); };
+      rosterEl.appendChild(row);
+    });
+  }
+
+  // ---- marcar/desmarcar como entregue ----
+  async function toggleDelivered(l){
+    if(!sb) return;
+    var nv=!l.delivered;
+    var res=await sb.from("cartas").update({delivered:nv}).eq("code", l.code);
+    if(res.error){ alert("Não foi possível atualizar: "+res.error.message); return; }
+    l.delivered=nv; renderRoster();
+  }
+
+  // ---- exportar planilha (CSV, abre no Excel/Sheets) ----
+  function exportCSV(){
+    if(!letters.length){ alert("Não há cartas para exportar."); return; }
+    var head=["Nome","Turma","Código","Remetente","WhatsApp","Aberturas","Última abertura","Entregue","Link"];
+    var esc=function(v){ v=(v==null?"":String(v)); return '"'+v.replace(/"/g,'""')+'"'; };
+    var linhas=[head.map(esc).join(";")];
+    letters.forEach(function(l){
+      linhas.push([
+        l.name, l.turma, l.code, (l.sender||""), (l.phone||""), (l.opens||0),
+        (l.lastOpened? new Date(l.lastOpened).toLocaleString("pt-BR"):""),
+        (l.delivered?"Sim":"Não"),
+        SITE_URL+"carta.html?t="+l.token
+      ].map(esc).join(";"));
+    });
+    var blob=new Blob(["\uFEFF"+linhas.join("\r\n")], {type:"text/csv;charset=utf-8;"});
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob); a.download="cartas-seladas.csv";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  $("btn-export").onclick=exportCSV;
+  $("search").addEventListener("input", renderRoster);
+
+  // ---- abrir o WhatsApp da pessoa com a carta já pronta ----
+  function enviarWhatsApp(l){
+    var num=(l.phone||"").replace(/\D/g,"");
+    if(!num){ alert("Esta carta não tem número de WhatsApp."); return; }
+    if(num.length<=11) num="55"+num;        // sem código do país → assume Brasil (55)
+    var link=SITE_URL+"carta.html?t="+encodeURIComponent(l.token);
+    var msg=
+      "Oi, "+l.name+"!\n\n"+
+      "Você recebeu uma carta selada.\n"+
+      "Talvez você já tenha ouvido algumas dessas palavras antes, mas desta vez elas chegaram de uma forma especial, guardadas com carinho para serem lidas no momento certo.\n\n"+
+      "Seu acesso chegou.\n"+
+      "Abra quando quiser e descubra o que foi escrito especialmente para você.\n\n"+
+      link;
+    window.open("https://wa.me/"+num+"?text="+encodeURIComponent(msg), "_blank");
+  }
+
+  // ---- remover carta ----
+  async function removeCarta(l){
+    if(!sb) return;
+    if(!confirm("Remover a carta de "+l.name+" ("+l.code+")?\n\nO QR Code dela deixará de funcionar. Esta ação não pode ser desfeita.")) return;
+    var res=await sb.from("cartas").delete().eq("code", l.code);
+    if(res.error){ alert("Não foi possível remover: "+res.error.message); return; }
+    letters=letters.filter(function(x){ return x.code!==l.code; });
+    renderRoster(); renderCards();
+  }
+
+  // ---- vouchers (impressão) ----
+  function renderCards(){
+    $("print-count").textContent = letters.length + " QR Code(s) prontos para impressão";
+    cardsEl.innerHTML="";
+    if(!letters.length){ cardsEl.innerHTML='<div class="empty">Cadastre uma carta para gerar os cartões.</div>'; return; }
+    letters.forEach(function(l){
+      var v=document.createElement("div"); v.className="voucher"; v.setAttribute("role","button"); v.tabIndex=0;
+      v.innerHTML=
+        '<span class="crop tl"></span><span class="crop tr"></span><span class="crop bl"></span><span class="crop br"></span>'+
+        '<div class="watermark" aria-hidden="true">♥</div>'+
+        '<p class="v-eyebrow">Carta selada</p>'+
+        '<p class="v-name"></p>'+
+        '<span class="v-turma"></span>'+
+        '<div class="qr-frame"></div>'+
+        '<div class="v-stub"><div class="v-code"></div><div class="v-action">Toque para pré-visualizar</div></div>';
+      v.querySelector(".v-name").textContent=l.name;
+      v.querySelector(".v-turma").textContent=l.turma;
+      v.querySelector(".v-code").textContent=l.code;
+      new QRCode(v.querySelector(".qr-frame"), {
+        text: SITE_URL + "carta.html?t=" + encodeURIComponent(l.token),
+        width:160, height:160,
+        colorDark:"#1B1410", colorLight:"#FCF7EC",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+      function go(){ openLetter(l); }
+      v.onclick=go;
+      v.onkeydown=function(e){ if(e.key==="Enter"||e.key===" "){e.preventDefault(); go();} };
+      cardsEl.appendChild(v);
+    });
+  }
+
+  // ---- carta digital ----
+  var overlay=$("overlay"), openTimer=null;
+  function openLetter(l){
+    $("ov-name").textContent=l.name;
+    $("ov-toname").textContent=l.name;
+    $("ov-code").textContent="Envelope "+l.code+" · "+l.turma;
+    $("ov-date").textContent=new Date().toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
+    $("ov-sign").innerHTML = l.sender ? ("Com carinho,<br>"+escapeHtml(l.sender)) : "Com carinho,";
+    var body=$("ov-body"); body.innerHTML="";
+    l.msg.split(/\n\n+/).forEach(function(para){
+      var p=document.createElement("p"); p.textContent=para.trim(); body.appendChild(p);
+    });
+    overlay.classList.remove("is-opening","is-open");
+    overlay.hidden=false;
+    requestAnimationFrame(function(){ overlay.classList.add("show"); });
+
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if(reduce){ overlay.classList.add("is-open"); }
+  }
+  function breakSeal(){
+    if(overlay.classList.contains("is-open")) return;
+    overlay.classList.add("is-opening");
+    clearTimeout(openTimer);
+    openTimer=setTimeout(function(){ overlay.classList.add("is-open"); spawnMotes(); }, 1150);
+  }
+  function closeLetter(){
+    overlay.classList.remove("show");
+    clearTimeout(openTimer);
+    setTimeout(function(){ overlay.hidden=true; overlay.classList.remove("is-opening","is-open"); clearMotes(); }, 480);
+  }
+  $("open-btn").onclick=breakSeal;
+  $("close").onclick=closeLetter;
+  overlay.addEventListener("keydown",function(e){ if(e.key==="Escape") closeLetter(); });
+
+  // ambient motes
+  var motes=[];
+  function spawnMotes(){
+    clearMotes();
+    for(var i=0;i<8;i++){
+      var m=document.createElement("span"); m.className="mote";
+      m.style.left=(15+Math.random()*70)+"%";
+      m.style.top=(40+Math.random()*40)+"%";
+      m.style.animationDelay=(Math.random()*6)+"s";
+      m.style.animationDuration=(7+Math.random()*5)+"s";
+      overlay.appendChild(m); motes.push(m);
+    }
+  }
+  function clearMotes(){ motes.forEach(function(m){m.remove();}); motes=[]; }
+
+  // ---- cadastro submit (grava no Supabase) ----
+  $("form").addEventListener("submit", async function(e){
+    e.preventDefault();
+    if(!sb) return;
+    var name=$("f-name").value.trim(), turma=$("f-turma").value.trim(), msg=$("f-msg").value.trim();
+    var sender=$("f-sender").value.trim();
+    var wa=$("f-wa").value.replace(/\D/g,"");
+    if(!name||!turma||!msg) return;
+    var btn=this.querySelector('button[type="submit"]'); btn.disabled=true;
+    var lc=$("last-code");
+
+    var row=null, lastErr=null;
+    for(var attempt=0; attempt<5 && !row; attempt++){
+      var c=code();
+      var res=await sb.from("cartas").insert({
+        code:c, recipient_name:name, recipient_turma:turma, message:msg, sender_name:(sender||null), recipient_phone:(wa||null)
+      }).select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, open_count, last_opened_at, delivered").single();
+      if(res.error){
+        lastErr=res.error;
+        if(res.error.code==="23505") continue;   // código repetido → tenta outro
+        break;
+      }
+      row=res.data;
+    }
+    btn.disabled=false;
+
+    if(!row){
+      lc.hidden=false; lc.style.color="#8A1B2D";
+      lc.textContent="Não foi possível salvar: "+((lastErr&&lastErr.message)||"erro desconhecido");
+      return;
+    }
+    letters.unshift(mapRow(row));
+    this.reset();
+    lc.hidden=false; lc.style.color="";
+    lc.innerHTML='Carta salva — código <strong>'+row.code+'</strong>. QR Code disponível na seção <strong>Impressão</strong>.';
+    renderRoster(); renderCards();
+  });
+
+  $("btn-print").onclick=function(){ renderCards(); setTimeout(function(){ window.print(); }, 60); };
+
+  // ---- mapeia uma linha do banco para o formato usado na tela ----
+  function mapRow(r){
+    return { code:r.code, token:r.public_token, name:r.recipient_name, turma:r.recipient_turma, msg:r.message, sender:r.sender_name, phone:r.recipient_phone, opens:(r.open_count||0), lastOpened:r.last_opened_at, delivered:!!r.delivered };
+  }
+
+  // ---- carrega as cartas do banco ----
+  async function loadCartas(){
+    var res=await sb.from("cartas")
+      .select("code, public_token, recipient_name, recipient_turma, message, sender_name, recipient_phone, open_count, last_opened_at, delivered, created_at")
+      .order("created_at",{ascending:false});
+    if(res.error){
+      rosterEl.innerHTML='<div class="empty">Erro ao carregar: '+res.error.message+'</div>';
+      return;
+    }
+    letters=(res.data||[]).map(mapRow);
+    renderRoster(); renderCards();
+  }
+
+  // ---- autenticação ----
+  var authEl=$("auth"), authMsg=$("auth-msg");
+  function showApp(){ authEl.hidden=true; $("logout").hidden=false; loadCartas(); }
+  function showLogin(msg, warn){
+    authEl.hidden=false; $("logout").hidden=true;
+    authMsg.textContent=msg||""; authMsg.className="auth-msg"+(warn?" warn":"");
+  }
+
+  $("login-form").addEventListener("submit", async function(e){
+    e.preventDefault();
+    if(!sb){ return; }
+    var email=$("a-email").value.trim(), pass=$("a-pass").value;
+    var btn=$("login-btn"); btn.disabled=true; authMsg.textContent="Entrando…"; authMsg.className="auth-msg";
+    var res=await sb.auth.signInWithPassword({ email:email, password:pass });
+    btn.disabled=false;
+    if(res.error){ authMsg.textContent="E-mail ou senha incorretos."; authMsg.className="auth-msg warn"; return; }
+    $("a-pass").value=""; showApp();
+  });
+
+  $("logout").onclick=async function(){
+    if(sb) await sb.auth.signOut();
+    letters=[]; renderRoster(); renderCards();
+    showLogin("Você saiu da sua conta.");
+  };
+
+  // ---- init ----
+  (async function init(){
+    if(!CONFIG_OK){
+      showLogin("Configure SUPABASE_URL e SUPABASE_ANON_KEY no topo do arquivo para conectar ao banco.", true);
+      return;
+    }
+    try{
+      var s=await sb.auth.getSession();
+      if(s.data && s.data.session){ showApp(); } else { showLogin(); }
+    }catch(err){ showLogin("Não foi possível iniciar a sessão.", true); }
+  })();
+})();
+</script>
+</body>
+</html>
